@@ -1,0 +1,279 @@
+config MODULE_CCARDIMX28
+	bool
+	select MMC_MXS_SSP2_ENABLE if WIRELESS
+
+choice
+	prompt "Select i.MXS board type"
+
+config MACH_MX28EVK
+	bool "Freescale MX28 EVK board"
+	depends on ARCH_MX28
+	select USB_ARCH_HAS_EHCI
+
+config MACH_CPX2
+	bool "Digi International ConnectPort X2"
+	depends on ARCH_MX28
+	select USB_ARCH_HAS_EHCI
+
+config MACH_CCARDIMX28JS
+	bool "Digi International ConnectCard for MX28 on JSK development board"
+	depends on ARCH_MX28
+	select USB_ARCH_HAS_EHCI
+	select MODULE_CCARDIMX28
+
+config MACH_CCARDIMX28
+	bool "Digi International ConnectCard for MX28"
+	depends on ARCH_MX28
+	select USB_ARCH_HAS_EHCI
+	select MODULE_CCARDIMX28
+
+config MACH_WR21
+	bool "Digi International TransPort WR21"
+	depends on ARCH_MX28
+	select USB_ARCH_HAS_EHCI
+endchoice
+
+config CCARDIMX28_AUTODETECT_MODULE
+	bool "Autodetect hardware version of ConnectCard for i.MX28 module"
+	depends on MODULE_CCARDIMX28
+	default y
+	help
+	  Select this option to have the kernel autodetect the module
+	  hardware version.
+	  Disable it if you want to manually force a module hardware version
+	  (not recommended).
+
+choice
+	prompt "Select module variant:"
+	depends on MODULE_CCARDIMX28
+	depends on !CCARDIMX28_AUTODETECT_MODULE
+	default CCARDIMX28_V3
+
+config CCARDIMX28_V1
+	bool "ConnectCard for i.MX28 module V1"
+	help
+	  Select this option if you have Version 1 of the module.
+	  PCB S/N 3001377x-01
+
+config CCARDIMX28_VX
+	bool "ConnectCard for i.MX28 module V2/V3/V4"
+	help
+	  Select this option if you have Version 2, 3, or 4 of the module.
+	  PCB S/N 3001377x-02, -03, or -04
+endchoice
+
+choice
+	prompt "Select development board variant:"
+	depends on MODULE_CCARDIMX28
+	default JSCCARDIMX28_VX
+
+config JSCCARDIMX28_V1
+	bool "ConnectCard for i.MX28 JumpStart kit Development Board V1"
+	help
+	  Select this option if you have Version 1 of the Development Board.
+	  PCB S/N 30013792-01
+
+config JSCCARDIMX28_VX
+	bool "ConnectCard for i.MX28 JumpStart kit Development Board V2/V3"
+	help
+	  Select this option if you have Version 2 or 3 of the Development Board.
+	  PCB S/N 30013792-02 or -03
+
+config JSCCARDIMX28_CUSTOM
+	bool "Custom ConnectCard for i.MX28 carrier board"
+	help
+	  Select this option if you are using your own custom-designed carrier
+	  board.
+
+endchoice
+
+config MTD_DIGI_REMOVE_DEFAULT_FREESCALE_PARTITION
+	bool "Remove the default boot partition created by Freescale"
+	depends on ARCH_MX28
+	default y if MACH_CPX2 || MODULE_CCARDIMX28 || MACH_WR21
+	default n
+	help
+	  You should select yes unless you know what you are doing.  We normally
+	  use kernel command line arguments to set the NAND partition information.
+	  However, the Freescale platform code creates a 20 Megabyte boot partition
+	  by default, and this will interfere with the partition settings on the
+	  command line.  So if you want to set the NAND partitions on the kernel
+	  command line, then set this option to y.
+	  Enable this for Digi International platforms.
+
+config NO_OTP_MAC_ADDRESS
+	bool "Do not read FEC MAC address from OTP bits"
+	depends on ARCH_MX28
+	default y if MACH_CPX2 || MODULE_CCARDIMX28 || MACH_WR21
+	default n
+	help
+	  Enabling this option disregards OTP bits (e-fuses) reserved to store
+	  the MAC address of the FEC. Instead, the MAC will be set by U-Boot or
+	  by the kernel command line with "fec_mac=...".
+
+config VECTORS_PHY_ADDR
+	int "vectors address"
+	default 0
+	help
+	  This config set vectors table is located which physical address
+
+config MXS_TIMER_WITH_MACH
+	bool "System Timer support Compare Match interrupt"
+	default y
+
+config MXS_RAM_FREQ_SCALING
+        bool "RAM frequency scaling support"
+        depends on ARCH_MXS
+        default y
+
+choice
+	prompt "Select MXS RAM chip"
+	depends on MXS_RAM_FREQ_SCALING
+
+config MXS_RAM_MDDR
+	bool "mDDR SDRAM"
+	depends on ARCH_MX23
+config MXS_RAM_DDR
+	bool "DDR SDRAM"
+	depends on ARCH_MX23
+
+endchoice
+
+config IRAM_ALLOC
+        bool
+        default y
+        select GENERIC_ALLOCATOR
+
+config MEM_mDDR
+	bool "Memory type is mDDR"
+	depends on ARCH_MX28
+	help
+	  Say Y to select mDDR memory
+
+menu "CAN Port Options"
+	depends on CAN_FLEXCAN && MODULE_CCARDIMX28
+
+config CCMX28_CAN0
+	bool "Enable CAN0 port"
+	default y
+	help
+	  Enables port CAN0 of the CPU
+
+config CCMX28_CAN1
+	bool "Enable CAN1 port"
+	default y
+	help
+	  Enables port CAN1 of the CPU
+
+endmenu
+
+menu "Ethernet Options"
+	depends on MODULE_CCARDIMX28 && FEC
+
+config CCARDIMX28_ENET0_LEDS
+	bool "Ethernet 0 LEDs"
+	depends on !MXS_AUART1_4WIRE
+	default n
+	help
+	  Ethernet 0 Link and Activity LEDs
+
+config CCARDIMX28_ENET1
+	bool "Second Ethernet (ENET1)"
+	default n
+	help
+	  Enables FEC interface ENET1
+
+config CCARDIMX28_ENET1_LEDS
+	bool "Ethernet 1 LEDs"
+	depends on CCARDIMX28_ENET1 && !MXS_AUART3_DEVICE_ENABLE
+	default n
+	help
+	  Ethernet 1 Link and Activity LEDs
+
+endmenu
+
+menu "SPI options"
+	depends on (SPI_GPIO || SPI_MXS) && MODULE_CCARDIMX28
+
+config CCARDIMX28_SPI_SSP1_ENABLE
+	bool "Use SSP1 port for SPI"
+	help
+	  "Configure SSP1 port pins for SPI"
+
+config CCARDIMX28_SPI_SSP3_ENABLE
+	bool "Use SSP3 port for SPI"
+	help
+	  "Configure SSP3 port pins for SPI"
+
+endmenu
+
+menu "PWM options"
+	depends on (MXS_PWM || MXS_PWM_MODULE) && MODULE_CCARDXMX28
+
+config CCARDIMX28_PWM_CH0
+	bool "Enable PWM0"
+	depends on !BACKLIGHT_MXS && !MXS_AUART1_DEVICE_ENABLE
+	help
+	  This enables PWM functionality on channel 0.
+
+config CCARDIMX28_PWM_CH1
+	bool "Enable PWM1"
+	depends on !MXS_AUART1_DEVICE_ENABLE
+	help
+	  This enables PWM functionality on channel 1.
+
+endmenu
+
+menu "Video Options"
+	depends on MODULE_CCARDIMX28 && FB_MXS
+
+choice
+        prompt "Color depth"
+        default CCARDIMX28_32_BITSPERPIXEL
+        help
+          Select the number of lines dedicated to carry LCD data.
+
+config CCARDIMX28_16_BITSPERPIXEL
+        bool "16 bits per pixel"
+
+config CCARDIMX28_24_BITSPERPIXEL
+        bool "24 bits per pixel"
+
+config CCARDIMX28_32_BITSPERPIXEL
+        bool "32 bits per pixel"
+
+endchoice
+
+config CCARDIMX28_DEFAULT_VIDEO_BPP
+	int
+	depends on MODULE_CCARDIMX28
+	default 16 if CCARDIMX28_16_BITSPERPIXEL
+	default 24 if CCARDIMX28_24_BITSPERPIXEL
+	default 32 if CCARDIMX28_32_BITSPERPIXEL
+
+choice
+        prompt "Display databus width"
+        default CCARDIMX28_DISP_RGB666 if JSCCARDIMX28_VX
+        default CCARDIMX28_DISP_RGB888 if JSCCARDIMX28_V1
+        help
+          Select the number of lines dedicated to carry LCD data.
+
+config CCARDIMX28_DISP_RGB666
+        bool "18bit databus width"
+        help
+          LCD databus will be 18 bits.
+
+config CCARDIMX28_DISP_RGB888
+        bool "24bit databus width"
+        depends on !JSCCARDIMX28_VX
+        help
+          LCD databus will be 24 bits.
+
+endchoice
+
+endmenu
+
+config CCARDIMX28_DISP_DATABUS_WIDTH
+	int
+	default "18" if CCARDIMX28_DISP_RGB666
+	default "24"

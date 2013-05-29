@@ -1,0 +1,115 @@
+# Copyright 2007 Simtec Electronics
+#
+# Licensed under GPLv2
+
+config CPU_S3C2443
+	bool
+	depends on ARCH_S3C2410
+	select S3C2443_DMA if S3C2410_DMA
+	select CPU_LLSERIAL_S3C2440
+	select SAMSUNG_CLKSRC
+	select S3C2443_CLOCK
+	select S3C_GPIO_PULL_UPDOWN
+	help
+	  Support for the S3C2443 SoC from the S3C24XX line
+
+config S3C2443_DMA
+	bool
+	depends on CPU_S3C2443
+	help
+	  Internal config node for S3C2443 DMA support
+
+menu "S3C2443 Machines"
+
+choice
+	prompt "S3C2443 Machines"
+
+config MACH_SMDK2443
+	bool "SMDK2443"
+	select CPU_S3C2443
+	select MACH_SMDK
+	select S3C_DEV_HSMMC
+	help
+	  Say Y here if you are using an SMDK2443
+
+config MACH_CC9M2443JS
+	bool "ConnectCore 9M 2443 on a JSCC9M2443 Devboard"
+	select CPU_S3C2443
+	select MACH_CC9M2443JS_PM if PM
+	help
+	  Say Y here if you are using the ConnectCore 9M 2443 module
+	  on a JSCC9M2443 Development Board
+
+config MACH_CCW9M2443JS
+	bool "ConnectCore Wi-9M 2443 on a JSCC9M2443 Devboard"
+	select CPU_S3C2443
+	select MACH_CC9M2443JS_PM if PM
+	help
+	  Say Y here if you are using the ConnectCore Wi-9M 2443 module
+	  on a JSCC9M2443 Development Board
+
+endchoice
+
+config MACH_CC9M2443JS_GPIOLIB
+	bool "Enables the machine's GPIO-Lib"
+	depends on (MACH_CC9M2443JS || MACH_CCW9M2443JS)
+	help
+	  Say Y to enable the GPIO-Lib support for the ConnectCore 9M 2443 module
+	  on a JSCC9M2443 Development Board
+
+config MACH_CC9M2443JS_PM
+	bool
+	depends on (MACH_CC9M2443JS || MACH_CCW9M2443JS) && PM
+	help
+	  Internal config for the Power Management support on the CC9M2443JS
+
+config MACH_CC9M2443JS_USB
+	bool "Enable the USB overload protection"
+	depends on (MACH_CC9M2443JS || MACH_CCW9M2443JS) && USB_OHCI_HCD
+	default y
+	help
+	  Enable the overload protection for the ConnectCore 9M 2443 module on a
+	  JSCC9M2443 Development Board.
+
+config S3C2443_USB_PHY
+	bool "Enable the USB PHY for the S3C2443"
+	depends on CPU_S3C2443
+	depends on USB_SUPPORT
+	default y
+	help
+	  This option enables the USB PHY on the S3C2443.
+
+	  IMPORTANT: After enabling/disabling the functionality of the USB PHY
+	  please verify that the UDC controller is correctly configured. When
+	  disabling the S3C2443-UDC the configuration menu selects automatically
+	  another one. The reconfiguration can be done under:
+
+	  Device Drivers > USB support > USB Gadget Support
+
+choice
+	prompt "Functionality"
+	depends on S3C2443_USB_PHY
+	bool
+
+config S3C2443_USB_PHY_UDC
+	bool "Device Controller"
+	select USB_GADGET
+	select USB_GADGET_SELECTED
+	select USB_GADGET_DUALSPEED
+	select USB_GADGET_S3C2443
+	select USB_S3C2443
+	help
+	  This option enables the USB PHY to work as device controller. Additionally
+	  it enables the USB Gadget framework.
+
+config S3C2443_USB_PHY_PORT
+	bool "Second root hub port"
+	select USB_OHCI_HCD
+	help
+	  This options enables the USB PHY to work as second USB root hub port.
+
+endchoice # S3C2443_USB_PHY
+
+source "arch/arm/mach-s3c2443/displays/Kconfig"
+
+endmenu

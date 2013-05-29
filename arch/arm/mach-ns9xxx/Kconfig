@@ -1,0 +1,749 @@
+if ARCH_NS9XXX
+
+menu "NS9xxx Implementations"
+
+config DIGI_UNSUPPORTED
+	def_bool n
+	help
+	  This symbol is used to disable some options in the kernel
+	  configuration that are not supported by Digi Embedded Linux.
+
+config PROCESSOR_NS921X
+	bool
+
+config RESET_DISABLED_MODULES
+	bool "reset disabled modules"
+	depends on BROKEN && PROCESSOR_NS921X
+	help
+	  If you say Y here, cpu components that are not used are not only
+	  disabled in the SYS_CLOCK register but also reset using the SYS_RESET
+
+	  Currently this breaks the serial console.
+
+config PROCESSOR_NS9210
+	bool
+	select PROCESSOR_NS921X
+
+config PROCESSOR_NS9215
+	bool
+	select PROCESSOR_NS921X
+
+config PROCESSOR_NS9360
+	bool
+	select USB_ARCH_HAS_OHCI
+
+config MODULE_CC9C
+	bool
+	select PROCESSOR_NS9360
+
+config MODULE_CC7UCAMRY
+	bool
+	select PROCESSOR_NS9210
+
+config MODULE_CC9P9215
+	bool
+	select PROCESSOR_NS9215
+
+config MODULE_CCW9P9215
+	bool
+	select PROCESSOR_NS9215
+
+config MODULE_CC9P9360
+	bool
+	select PROCESSOR_NS9360
+
+config MODULE_CME9210
+	bool
+	select PROCESSOR_NS9210
+
+config MODULE_CWME9210
+	bool
+	select PROCESSOR_NS9210
+
+config MODULE_CCW9C
+	bool
+	select PROCESSOR_NS9360
+
+config MODULE_INC20OTTER
+	bool
+	select PROCESSOR_NS9210
+
+config BOARD_A9M9750DEV
+	bool
+
+config BOARD_JSCC9P9215
+	bool
+
+config BOARD_JSCCW9P9215
+	bool
+
+config BOARD_JSCC9P9360
+	bool
+
+config BOARD_JSCME9210
+	bool
+
+config BOARD_JSCWME9210
+	bool
+
+config BOARD_UNCBAS
+	bool
+
+choice
+	prompt "NS9xxx Implementations"
+
+config MACH_CC7UCAMRY
+	bool "ConnectCore 7U Camry"
+	depends on DIGI_UNSUPPORTED
+	select MODULE_CC7UCAMRY
+	select BOARD_UNCBAS
+	help
+	  Say Y here if you are using the CC7U Camry module.
+
+	  This is a modified ConnectCore 7U with an NS9210 processor
+	  instead of an NS7520.
+
+config MACH_CC9C
+	bool "ConnectCore 9C"
+	select MODULE_CC9C
+	help
+	  Say Y here if you are using the ConnectCore 9C.
+
+config MACH_CCW9C
+	bool "ConnectCore Wi-9C"
+	select MODULE_CCW9C
+	help
+	  Say Y here if you are using the ConnectCore Wi-9C.
+
+config MACH_CC9P9215
+	bool "ConnectCore 9P 9215"
+	select MODULE_CC9P9215
+	help
+	  Say Y here if you are using the ConnectCore 9P 9215 module on an
+	  currently unsupported board.
+
+config MACH_CC9P9215JS
+	bool "ConnectCore 9P 9215 on a JSCC9P9215 Devboard"
+	select MODULE_CC9P9215
+	select BOARD_JSCC9P9215
+	help
+	  Say Y here if you are using the ConnectCore 9P 9215 module
+	  on a JSCC9P9215 Development Board.
+
+config MACH_CCW9P9215
+	bool "ConnectCore Wi-9P 9215"
+	select MODULE_CCW9P9215
+	help
+	  Say Y here if you are using the ConnectCore Wi-9P 9215 module on an
+	  currently unsupported board.
+
+config MACH_CCW9P9215JS
+	bool "ConnectCore Wi-9P 9215 on a JSCCW9P9215 Devboard"
+	select MODULE_CCW9P9215
+	select BOARD_JSCCW9P9215
+	help
+	  Say Y here if you are using the ConnectCore Wi-9P 9215 module
+	  on a JSCCW9P9215 Development Board.
+
+config MACH_CC9P9360DEV
+	bool "ConnectCore 9P 9360 on an A9M9750 Devboard"
+	depends on DIGI_UNSUPPORTED
+	select MODULE_CC9P9360
+	select BOARD_A9M9750DEV
+	help
+	  Say Y here if you are using the ConnectCore 9P 9360
+	  on an A9M9750 Development Board.
+
+config MACH_CC9P9360JS
+	bool "ConnectCore 9P 9360 on a JSCC9P9360 Devboard"
+	select MODULE_CC9P9360
+	select BOARD_JSCC9P9360
+	help
+	  Say Y here if you are using the ConnectCore 9P 9360
+	  on a JSCC9P9360 Development Board.
+
+config MACH_CME9210
+	bool "Digi Connect ME 9210"
+	select MODULE_CME9210
+
+config MACH_CME9210JS
+	bool "Digi Connect ME 9210 on Devboard"
+	select MODULE_CME9210
+	select BOARD_JSCME9210
+
+config MACH_CWME9210
+	bool "Digi Connect Wi-ME 9210"
+	select MODULE_CWME9210
+	select WEXT_PRIV
+	select WEXT_SPY
+
+config MACH_CWME9210JS
+	bool "Digi Connect Wi-ME 9210 on Devboard"
+	select MODULE_CWME9210
+	select BOARD_JSCWME9210
+	select WEXT_PRIV
+	select WEXT_SPY
+
+config MACH_INC20OTTER
+	bool "Inc20-Otter"
+	depends on DIGI_UNSUPPORTED
+	select MODULE_INC20OTTER
+
+config MACH_OTTER
+	bool "Otter"
+	depends on DIGI_UNSUPPORTED
+	select PROCESSOR_NS9210
+
+endchoice
+
+config NS9XXX_HAVE_GPIO_LIB
+	bool "Use GPIO_LIB" if DIGI_UNSUPPORTED
+	default y
+	select ARCH_REQUIRE_GPIOLIB
+
+if (MACH_CC9C || MACH_CCW9C)
+
+comment "ConnectCore 9C/Wi-9C configuration"
+
+config CCX9C_SERIAL_PORTA
+	bool "Serial port A"
+	default y
+	depends on SERIAL_NS9360 && !CCX9C_SPI_PORTA
+
+choice
+	prompt "port configuration"
+	depends on CCX9C_SERIAL_PORTA
+	default CCX9C_SERIAL_PORTA_FULL
+
+config CCX9C_SERIAL_PORTA_RXTX
+	bool "RX/TX only"
+
+config CCX9C_SERIAL_PORTA_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CCX9C_SERIAL_PORTA_FULL
+	bool "Full port"
+
+endchoice
+
+config CCX9C_SPI_PORTA
+	bool "SPI port A"
+	default n
+	depends on SPI_NS9360
+
+config CCX9C_SERIAL_PORTB
+	bool "Serial port B"
+	default y
+	depends on SERIAL_NS9360 && !CCX9C_SPI_PORTB
+
+choice
+	prompt "port configuration"
+	depends on CCX9C_SERIAL_PORTB
+	default CCX9C_SERIAL_PORTB_FULL
+
+config CCX9C_SERIAL_PORTB_RXTX
+	bool "RX/TX only"
+
+config CCX9C_SERIAL_PORTB_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CCX9C_SERIAL_PORTB_FULL
+	bool "Full port"
+
+endchoice
+
+config CCX9C_SPI_PORTB
+	bool "SPI port B"
+	default y
+	depends on SPI_NS9360
+
+config CCX9C_SERIAL_PORTC
+	bool "Serial port C"
+	default y
+	depends on SERIAL_NS9360 && !CCX9C_SPI_PORTC && !CCX9C_FB
+
+choice
+	prompt "port configuration"
+	depends on CCX9C_SERIAL_PORTC
+	default CCX9C_SERIAL_PORTC_FULL
+
+config CCX9C_SERIAL_PORTC_RXTX
+	bool "RX/TX only"
+
+config CCX9C_SERIAL_PORTC_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CCX9C_SERIAL_PORTC_FULL
+	bool "Full port"
+
+endchoice
+
+config CCX9C_SPI_PORTC
+	bool "SPI port C"
+	default n
+	depends on SPI_NS9360 && !CCX9C_FB
+
+config CCX9C_SERIAL_PORTD
+	bool "Serial port D"
+	default y
+	depends on SERIAL_NS9360 && !CCX9C_SPI_PORTD && !CCX9C_FB
+
+choice
+	prompt "port configuration"
+	depends on CCX9C_SERIAL_PORTD
+	default CCX9C_SERIAL_PORTD_FULL
+
+config CCX9C_SERIAL_PORTD_RXTX
+	bool "RX/TX only"
+
+config CCX9C_SERIAL_PORTD_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CCX9C_SERIAL_PORTD_FULL
+	bool "Full port"
+
+endchoice
+
+config CCX9C_SPI_PORTD
+	bool "SPI port D"
+	default n
+	depends on SPI_NS9360 && !CCX9C_FB
+
+config CCX9C_FB
+	bool "Framebuffer"
+	default y
+	depends on FB_NS9360
+
+config CCX9C_TOUCH
+	bool "Touchscreen"
+	default y
+	depends on TOUCHSCREEN_ADS7846 && CCX9C_FB && CCX9C_SPI_PORTB
+
+endif	## if (MACH_CC9C || MACH_CCW9C)
+
+
+if (MACH_CC9P9215JS || MACH_CCW9P9215JS)
+
+comment "ConnectCore 9P/Wi-9P 9215 configuration"
+
+config CC9P9215JS_SERIAL_PORTA
+	bool "Serial port A"
+	default y
+	depends on SERIAL_NS921X && !CC9P9215JS_SPI
+
+choice
+	prompt "port configuration"
+	depends on CC9P9215JS_SERIAL_PORTA
+	default CC9P9215JS_SERIAL_PORTA_FULL
+
+config CC9P9215JS_SERIAL_PORTA_RXTX
+	bool "RX/TX only"
+
+config CC9P9215JS_SERIAL_PORTA_RXTX485
+	bool "RX/TX/RTS (RTS for RS-485 transceiver control)"
+	help
+	  This mode enables the RS-485 transceiver control functionality
+	  of the RTS line in the serial port.
+
+config CC9P9215JS_SERIAL_PORTA_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CC9P9215JS_SERIAL_PORTA_FULL
+	bool "Full port"
+
+endchoice
+
+choice
+	prompt "RTS polarity for RS-485 transceiver control"
+	depends on CC9P9215JS_SERIAL_PORTA_RXTX485
+	default CC9P9215JS_SERIAL_PORTA_RTS485POLLOW
+
+config CC9P9215JS_SERIAL_PORTA_RTS485POLHIGH
+	bool "High polarity (RTS high on transmission)"
+	help
+	  RTS will be driven high during transmission and low during
+	  reception.
+
+config CC9P9215JS_SERIAL_PORTA_RTS485POLLOW
+	bool "Low polarity (RTS low on transmission)"
+	help
+	  RTS will be driven low during transmission and high during
+	  reception.
+
+endchoice
+
+config CC9P9215JS_SERIAL_PORTB
+	bool "Serial port B"
+	default y
+	depends on SERIAL_NS921X
+
+choice
+	prompt "port configuration"
+	depends on CC9P9215JS_SERIAL_PORTB
+	default CC9P9215JS_SERIAL_PORTB_FULL
+
+config CC9P9215JS_SERIAL_PORTB_RXTX
+	bool "RX/TX only"
+
+config CC9P9215JS_SERIAL_PORTB_RXTX485
+	bool "RX/TX/RTS (RTS for RS-485 transceiver control)"
+	help
+	  This mode enables the RS-485 transceiver control functionality
+	  of the RTS line in the serial port.
+
+config CC9P9215JS_SERIAL_PORTB_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CC9P9215JS_SERIAL_PORTB_FULL
+	bool "Full port"
+
+endchoice
+
+choice
+	prompt "RTS polarity for RS-485 transceiver control"
+	depends on CC9P9215JS_SERIAL_PORTB_RXTX485
+	default CC9P9215JS_SERIAL_PORTB_RTS485POLLOW
+
+config CC9P9215JS_SERIAL_PORTB_RTS485POLHIGH
+	bool "High polarity (RTS high on transmission)"
+	help
+	  RTS will be driven high during transmission and low during
+	  reception.
+
+config CC9P9215JS_SERIAL_PORTB_RTS485POLLOW
+	bool "Low polarity (RTS low on transmission)"
+	help
+	  RTS will be driven low during transmission and high during
+	  reception.
+
+endchoice
+
+config CC9P9215JS_SERIAL_PORTC
+	bool "Serial port C"
+	default y
+	depends on SERIAL_NS921X
+
+choice
+	prompt "port configuration"
+	depends on CC9P9215JS_SERIAL_PORTC
+	default CC9P9215JS_SERIAL_PORTC_FULL
+
+config CC9P9215JS_SERIAL_PORTC_RXTX
+	bool "RX/TX only"
+
+config CC9P9215JS_SERIAL_PORTC_RXTX485
+	bool "RX/TX/RTS (RTS for RS-485 transceiver control)"
+	help
+	  This mode enables the RS-485 transceiver control functionality
+	  of the RTS line in the serial port.
+
+config CC9P9215JS_SERIAL_PORTC_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CC9P9215JS_SERIAL_PORTC_FULL
+	bool "Full port"
+
+endchoice
+
+choice
+	prompt "RTS polarity for RS-485 transceiver control"
+	depends on CC9P9215JS_SERIAL_PORTC_RXTX485
+	default CC9P9215JS_SERIAL_PORTC_RTS485POLLOW
+
+config CC9P9215JS_SERIAL_PORTC_RTS485POLHIGH
+	bool "High polarity (RTS high on transmission)"
+	help
+	  RTS will be driven high during transmission and low during
+	  reception.
+
+config CC9P9215JS_SERIAL_PORTC_RTS485POLLOW
+	bool "Low polarity (RTS low on transmission)"
+	help
+	  RTS will be driven low during transmission and high during
+	  reception.
+
+endchoice
+
+config CC9P9215JS_SERIAL_PORTD
+	bool "Serial port D"
+	default y
+	depends on SERIAL_NS921X
+
+choice
+	prompt "port configuration"
+	depends on CC9P9215JS_SERIAL_PORTD
+	default CC9P9215JS_SERIAL_PORTD_FULL
+
+config CC9P9215JS_SERIAL_PORTD_RXTX
+	bool "RX/TX only"
+
+config CC9P9215JS_SERIAL_PORTD_RXTX485
+	bool "RX/TX/RTS (RTS for RS-485 transceiver control)"
+	help
+	  This mode enables the RS-485 transceiver control functionality
+	  of the RTS line in the serial port.
+
+config CC9P9215JS_SERIAL_PORTD_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CC9P9215JS_SERIAL_PORTD_FULL
+	bool "Full port"
+
+endchoice
+
+choice
+	prompt "RTS polarity for RS-485 transceiver control"
+	depends on CC9P9215JS_SERIAL_PORTD_RXTX485
+	default CC9P9215JS_SERIAL_PORTD_RTS485POLLOW
+
+config CC9P9215JS_SERIAL_PORTD_RTS485POLHIGH
+	bool "High polarity (RTS high on transmission)"
+	help
+	  RTS will be driven high during transmission and low during
+	  reception.
+
+config CC9P9215JS_SERIAL_PORTD_RTS485POLLOW
+	bool "Low polarity (RTS low on transmission)"
+	help
+	  RTS will be driven low during transmission and high during
+	  reception.
+
+endchoice
+
+config CC9P9215JS_SPI
+	bool "SPI port"
+	default y
+	depends on SPI_NS921X
+
+config CC9P9215JS_EDT_DISPLAY_QVGA
+	bool "Support for the EDT QVGA TFT Display"
+	default n
+	select FB_HX8347
+
+config CC9P9215JS_TOUCH
+	bool "Touchscreen"
+	default y
+	depends on TOUCHSCREEN_ADS7846 && CC9P9215JS_EDT_DISPLAY_QVGA && CC9P9215JS_SPI
+
+endif	## if (MACH_CC9P9215JS || MACH_CCW9P9215JS)
+
+
+if MACH_CC9P9360JS
+
+comment "ConnectCore 9P 9360 configuration"
+
+config CC9P9360JS_SERIAL_PORTA
+	bool "Serial port A"
+	default y
+	depends on SERIAL_NS9360 && !CC9P9360JS_SPI_PORTA
+
+choice
+	prompt "port configuration"
+	depends on CC9P9360JS_SERIAL_PORTA
+	default CC9P9360JS_SERIAL_PORTA_FULL
+
+config CC9P9360JS_SERIAL_PORTA_RXTX
+	bool "RX/TX only"
+
+config CC9P9360JS_SERIAL_PORTA_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CC9P9360JS_SERIAL_PORTA_FULL
+	bool "Full port"
+
+endchoice
+
+config CC9P9360JS_SPI_PORTA
+	bool "SPI port A"
+	default n
+	depends on SPI_NS9360
+
+config CC9P9360JS_SERIAL_PORTB
+	bool "Serial port B"
+	default y
+	depends on SERIAL_NS9360 && !CC9P9360JS_SPI_PORTB
+
+choice
+	prompt "port configuration"
+	depends on CC9P9360JS_SERIAL_PORTB
+	default CC9P9360JS_SERIAL_PORTB_FULL
+
+config CC9P9360JS_SERIAL_PORTB_RXTX
+	bool "RX/TX only"
+
+config CC9P9360JS_SERIAL_PORTB_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CC9P9360JS_SERIAL_PORTB_FULL
+	bool "Full port"
+
+endchoice
+
+config CC9P9360JS_SPI_PORTB
+	bool "SPI port B"
+	default y
+	depends on SPI_NS9360
+
+config CC9P9360JS_SERIAL_PORTC
+	bool "Serial port C"
+	default y
+	depends on SERIAL_NS9360 && !CC9P9360JS_SPI_PORTC && !CC9P9360JS_FB
+
+choice
+	prompt "port configuration"
+	depends on CC9P9360JS_SERIAL_PORTC
+	default CC9P9360JS_SERIAL_PORTC_FULL
+
+config CC9P9360JS_SERIAL_PORTC_RXTX
+	bool "RX/TX only"
+
+config CC9P9360JS_SERIAL_PORTC_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CC9P9360JS_SERIAL_PORTC_FULL
+	bool "Full port"
+
+endchoice
+
+config CC9P9360JS_SPI_PORTC
+	bool "SPI port C"
+	default n
+	depends on SPI_NS9360 && !CC9P9360JS_FB
+
+config CC9P9360JS_SERIAL_PORTD
+	bool "Serial port D"
+	default y
+	depends on SERIAL_NS9360 && !CC9P9360JS_SPI_PORTD && !CC9P9360JS_FB
+
+choice
+	prompt "port configuration"
+	depends on CC9P9360JS_SERIAL_PORTD
+	default CC9P9360JS_SERIAL_PORTD_FULL
+
+config CC9P9360JS_SERIAL_PORTD_RXTX
+	bool "RX/TX only"
+
+config CC9P9360JS_SERIAL_PORTD_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CC9P9360JS_SERIAL_PORTD_FULL
+	bool "Full port"
+
+endchoice
+
+config CC9P9360JS_SPI_PORTD
+	bool "SPI port D"
+	default n
+	depends on SPI_NS9360 && !CC9P9360JS_FB
+
+config CC9P9360JS_FB
+	bool "Framebuffer"
+	default y
+	depends on FB_NS9360
+
+config CC9P9360JS_TOUCH
+	bool "Touchscreen"
+	default y
+	depends on TOUCHSCREEN_ADS7846 && CC9P9360JS_FB && CC9P9360JS_SPI_PORTB
+
+# Commented out as cc9p9360 does not assemble 0 ohm R2
+# resistor which routes the RTC alarm to the CPU
+#config EXTERNAL_RTC_ALARM
+#	bool "External RTC Alarm interrupt"
+#	default n
+#	depends on !CC9P9360JS_SERIAL_PORTA_FULL
+#	help
+#	  This enables the interrupt coming from the external
+#	  I2C DS1337 Real Time Clock.
+#comment "--- External RTC Alarm interrupt (disable Serial port A Full)"
+#	depends on CC9P9360JS_SERIAL_PORTA_FULL
+
+endif	## if MACH_CC9P9360JS
+
+
+if (MACH_CME9210JS || MACH_CWME9210JS)
+
+comment "Digi Connect ME/Wi-ME 9210 configuration"
+
+config CME9210JS_SERIAL_PORTA
+	bool "Serial port A"
+	default y
+	depends on SERIAL_NS921X
+
+choice
+	prompt "port configuration"
+	depends on CME9210JS_SERIAL_PORTA
+	default CME9210JS_SERIAL_PORTA_RXTX
+
+config CME9210JS_SERIAL_PORTA_RXTX
+	bool "RX/TX only"
+
+config CME9210JS_SERIAL_PORTA_RXTX485
+	bool "RX/TX/RTS (RTS for RS-485 transceiver control)"
+	help
+	  This mode enables the RS-485 transceiver control functionality
+	  of the RTS line in the serial port.
+
+config CME9210JS_SERIAL_PORTA_CTSRTSRXTX
+	bool "CTS/RTS/RX/TX"
+
+config CME9210JS_SERIAL_PORTA_FULL
+	bool "Full port"
+
+endchoice
+
+choice
+	prompt "RTS polarity for RS-485 transceiver control"
+	depends on CME9210JS_SERIAL_PORTA_RXTX485
+	default CME9210JS_SERIAL_PORTA_RTS485POLHIGH
+
+config CME9210JS_SERIAL_PORTA_RTS485POLHIGH
+	bool "High polarity (RTS high on transmission)"
+	help
+	  RTS will be driven high during transmission and low during
+	  reception.
+
+config CME9210JS_SERIAL_PORTA_RTS485POLLOW
+	bool "Low polarity (RTS low on transmission)"
+	help
+	  RTS will be driven low during transmission and high during
+	  reception.
+
+endchoice
+
+
+config CME9210JS_SERIAL_PORT_ON_JTAG_CON
+        bool "Serial port on JTAG connector (only modules with JTAG-header)"
+        depends on SERIAL_NS921X
+        help
+          Enable serial port on the JTAG-header. Only RX/TX lines are available.
+          Note that the serial port is different depending on the Digi Connect
+          ME or Wi-ME 9210 variant:
+            -Port B on the Connect ME 9210 with CAN and Digi Connect Wi-ME 9210.
+            -Port C on others.
+
+config CME9210JS_SPI
+	bool "SPI port"
+	depends on !CME9210JS_SERIAL_PORTA
+
+endif	## if MACH_CME9210JS || MACH_CWME9210JS
+
+if MACH_CME9210JS
+
+config GPIO_ETH_ACTIVITY_LED
+	bool "Ethernet activity LED"
+	depends on NS9XXX_ETH
+	default y
+	help
+	  Enables the use of a GPIO as Ethernet RX/TX activity LED
+          The used GPIO depends on the specific module variant:
+            -CME9210 with CAN:  GPIO 10.
+            -Others:            GPIO 14.
+
+endif	## if MACH_CME9210JS
+
+source "arch/arm/mach-ns9xxx/include/mach/display/Kconfig"
+
+endmenu
+
+endif

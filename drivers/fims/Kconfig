@@ -1,0 +1,767 @@
+#
+# FIM devices configuration
+#
+
+menuconfig FIM_CORE
+	tristate "FIM drivers support"
+	depends on PROCESSOR_NS921X
+        select FW_LOADER
+        select HOTPLUG
+        select FIM_ONE_SDIO if MACH_CWME9210 || MACH_CWME9210JS
+	default n
+	default y if MACH_CWME9210 || MACH_CWME9210JS
+	help
+	  This option adds the support for the Flexible Interfaces Modules (FIM).
+	  Currently only the NS921X processors are supporting the FIM-devices.
+          The number of available FIMs is two for NS9215 and one for NS9210.
+
+	  For installing the specific FIM-firmware, the FIM core driver depends on
+	  Hotplug and the firmware-subsystem too.
+
+##           If a FIM-driver is selected as loadable module, then is required
+##           to have installed the user-space application 'mdev' (Busybox).
+
+
+if FIM_CORE
+
+config FIM_APPKIT_BOARD
+	bool "Use Digi's FIM Application Kit hardware board"
+	default y
+	help
+	  Enable this if you are going to use Digi's FIM Application Kit hardware
+	  board. This will configure the correct GPIOs to use with each FIM
+	  and prevents you from selecting combinations of FIMs which are not
+	  allowed in this hardware board (for example SDIO on both FIMs).
+
+	  If using a custom board, you can disable this option.
+
+config FIM_MODULES
+	bool "Enable FIM drivers as loadable modules"
+	depends on ((MACH_CC9P9215JS || MACH_CC9P9215 || MACH_CCW9P9215JS || MACH_CCW9P9215) && (!FIM_ZERO || !FIM_ONE)) || ((MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210) && !FIM_ZERO)
+	help
+	  This option allows to build the FIM drivers as loadable modules
+	  rather than as built-in features.
+
+if FIM_MODULES
+
+# -- These are the options for enabling the FIM-drivers as loadable modules
+config FIM_SDIO_MODULE
+	bool "SDIO as loadable module"
+	depends on MMC && MMC_BLOCK && !FIM_ZERO_SDIO_SELECTED && !FIM_ONE_SDIO_SELECTED && (!FIM_ZERO || !FIM_ONE) && !MACH_CWME9210JS && !MACH_CWME9210
+	select FIM_ZERO_SDIO
+	select FIM_ONE_SDIO if !(MACH_CME9210JS || MACH_CME9210)
+	help
+	  Enables the FIM SDIO as loadable module. The number of FIMs to be
+	  handled by this driver can be passed with the module parameter 'fims',
+	  where:
+	  - fims=0 (FIM0)
+	  - fims=1 (FIM1)
+	  - fims=2 (FIM0 and FIM1)
+
+	  If Digi's FIM Application Kit hardware board is selected, SDIO can only
+	  work with one of the FIMs, and the following GPIOs will be used:
+	  - On cc9p9215js platform:
+	  -- GPIO 101 for Card Detect
+	  -- GPIO 100 for Write Protect
+	  - On cme9210js platform:
+	  -- GPIO 9 for Card Detect
+	  -- GPIO 6 for Write Protect
+
+	  If Digi's FIM Application Kit hardware board is disabled because a custom
+	  hardware board is to be used instead, then six new module parameters
+	  are allowed to specify GPIOs for Card Detect and Write Protect
+	  functionality for each FIM:
+	  - 'cd0' for Card Detect on FIM0
+	  - 'cd0_func' for Card Detect GPIO function on FIM0
+	  - 'wp0' for Write Protect on FIM0
+	  - 'cd1' for Card Detect on FIM1
+	  - 'cd1_func' for Card Detect GPIO function on FIM1
+	  - 'wp1' for Write Protect on FIM1
+	  If a parameter is not specified, the corresponding functionality
+	  won't be available for that FIM.
+	  If Card Detect functionality is not available, it is assumed the card is
+	  always plugged. If Write Protect functionality is not available, it is
+	  assumed Write Protect is off.
+
+config FIM_SERIAL_MODULE
+	bool "Serial as loadable module"
+	depends on !FIM_ZERO_SERIAL_SELECTED && !FIM_ONE_SERIAL_SELECTED && (!FIM_ZERO || !FIM_ONE)
+	select FIM_ZERO_SERIAL
+	select FIM_ONE_SERIAL if !(MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210)
+	select SERIAL_CORE
+	help
+          Enables the FIM Serial loadable module. The number of FIMs to be
+	  handled by this driver can be passed with the module parameter 'fims'
+
+config FIM_CAN_MODULE
+	bool "CAN as loadable module"
+	depends on CAN && CAN_DEV && !FIM_ZERO_CAN_SELECTED && !FIM_ONE_CAN_SELECTED && (!FIM_ZERO || !FIM_ONE)
+	select FIM_ZERO_CAN
+	select FIM_ONE_CAN if !(MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210)
+	help
+          Enables the FIM CAN as loadable module. The number of FIMs to be
+	  handled by this driver can be passed with the module parameter 'fims'
+
+config FIM_USB_MODULE
+        bool "USB serial port driver as loadable module"
+        depends on SERIAL_CORE && !FIM_ZERO_USB_SELECTED && !FIM_ONE_USB_SELECTED
+        select FIM_ZERO_USB
+        select FIM_ONE_USB if !(MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210)
+        help
+          Enables the FIM USB Device Controller as loadable module.
+          The number of FIMs to be handled by this driver can be passed with the
+          module parameter 'fims'
+
+config FIM_SPI_MODULE
+        bool "SPI port driver as loadable module"
+        depends on SPI && !FIM_ZERO_SPI_SELECTED && !FIM_ONE_SPI_SELECTED
+        select FIM_ZERO_SPI
+        select FIM_ONE_SPI if !(MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210)
+        help
+          Enables the FIM SPI Device controller as a loadable module.
+
+	  WARNING: If using cme9210js platform and serial port A, the FIM SPI
+	  port won't generate the SPI chip select signal because this signal
+	  conflicts with serial port A. The alternatives are:
+	  - Disable serial port A
+	  - Use an additional GPIO as chip select signal
+
+
+endif # FIM_MODULES
+
+config FIM_ZERO
+	bool "FIM 0"
+	depends on (PROCESSOR_NS9210 || PROCESSOR_NS9215) && FIM_CORE=y
+	help
+	  Enables FIM 0
+
+choice
+	prompt "Choose FIM 0 driver"
+	depends on FIM_ZERO
+	help
+	  Only one of the following drivers can run in the FIM. Please pick one.
+
+config FIM_ZERO_SDIO_SELECTED
+	bool "SDIO driver"
+	depends on MMC && MMC_BLOCK
+	depends on !(CME9210JS_SERIAL_PORTA_FULL || CME9210JS_SERIAL_PORTA_CTSRTSRXTX)
+	select FIM_ZERO_SDIO
+	help
+	  Enables the FIM-SDIO driver.
+
+          For testing the SDIO functionality is required to choose an additional
+          SDIO-driver (GPS/UART) from the MMC-core.
+
+config FIM_ZERO_SDIO_CD
+	bool "Card Detect for SDIO on FIM 0"
+	depends on FIM_ZERO && FIM_ZERO_SDIO_SELECTED && !FIM_APPKIT_BOARD
+	help
+	  If using a custom hardware board for using the FIM as SDIO function,
+	  this item lets you specify whether the inteface will support the
+	  Card Detect (CD) functionality using a GPIO.
+
+config FIM_ZERO_SDIO_CD_GPIO
+	int "GPIO to use for Card Detect on FIM 0"
+	default 101 if !(MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210)
+	default 9 if (MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210)
+	depends on FIM_ZERO_SDIO_CD
+	help
+	  Specify the GPIO number to use for the SDIO Card Detect signal.
+
+config FIM_ZERO_SDIO_CD_GPIO_FUNC
+	int "Card Detect GPIO function"
+	default 2
+	depends on FIM_ZERO_SDIO_CD
+	help
+	  Specify the GPIO function to configure for the Card Detect GPIO.
+	  If the GPIO is interrupt capable, write here the GPIO's interrupt
+	  function number. Otherwise use the value that corresponds to the
+	  standard GPIO function. Please refer to the processor's Hardware
+	  Reference Manual for the available GPIOs and their functions.
+
+config FIM_ZERO_SDIO_WP
+	bool "Write Protect for SDIO on FIM 0"
+	depends on FIM_ZERO && FIM_ZERO_SDIO_SELECTED && !FIM_APPKIT_BOARD
+	help
+	  If using a custom hardware board for using the FIM as SDIO function,
+	  this item lets you specify whether the inteface will support the
+	  Write Protect (WP) functionality using a GPIO.
+
+config FIM_ZERO_SDIO_WP_GPIO
+	int "GPIO to use for Write Protect on FIM 0"
+	default 100 if !(MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210)
+	default 6 if (MACH_CME9210JS || MACH_CME9210 || MACH_CWME9210JS || MACH_CWME9210)
+	depends on FIM_ZERO_SDIO_WP
+	help
+	  Specify the GPIO number to use for the SDIO Write Protect signal.
+
+config FIM_ZERO_SERIAL_RXTX
+	bool "Serial driver 2-wires (RX/TX)"
+	depends on !(CME9210JS_SERIAL_PORTA_FULL || CME9210JS_SERIAL_PORTA_CTSRTSRXTX)
+	select FIM_ZERO_SERIAL_SELECTED
+	help
+	  Enables the FIM-serial driver without the HW flow control (CTS and RTS
+	  lines are not requested by the driver).
+
+config FIM_ZERO_SERIAL_CTSRTS
+	bool "Serial driver 4-wires (RX/TX/CTS/RTS)"
+	depends on !(CME9210JS_SERIAL_PORTA || CME9210JS_SERIAL_PORTA_FULL || CME9210JS_SERIAL_PORTA_CTSRTSRXTX)
+	select FIM_ZERO_SERIAL_SELECTED
+	help
+	  Enables the FIM-serial driver with HW flow control support.
+
+config FIM_ZERO_CAN_SELECTED
+	bool "CAN-bus driver"
+	depends on CAN && CAN_DEV && !CME9210JS_SERIAL_PORTA_FULL
+	select FIM_ZERO_CAN
+	help
+	  Enables the FIM-CAN bus driver.
+
+config FIM_ZERO_W1_SELECTED
+	bool "1-wire driver"
+	depends on !(CME9210JS_SERIAL_PORTA_FULL || CME9210JS_SERIAL_PORTA_CTSRTSRXTX)
+	select FIM_ZERO_W1
+	select W1
+	select W1_MASTER_GPIO
+	help
+	  Enables the 1-wire GPIO driver on the FIM-board. For the selection of the
+	  connected slaves you need to enter the config menu of the 1-wire subsystem.
+
+config FIM_ZERO_USB_SELECTED
+        bool "USB serial port driver"
+	depends on !(CME9210JS_SERIAL_PORTA)
+	select FIM_ZERO_USB
+	select SERIAL_CORE
+        help
+          Enables the USB serial port driver (low speed).
+
+config FIM_ZERO_SPI_SELECTED
+        bool "SPI driver"
+        depends on SPI && !(CC9P9215JS_SERIAL_PORTA || CC9P9215JS_SPI)
+        select FIM_ZERO_SPI
+        help
+          Enables the SPI port driver on FIM 0.
+
+	  WARNING: If using cme9210js platform and serial port A, the FIM SPI
+	  port won't generate the SPI chip select signal because this signal
+	  conflicts with serial port A. The alternatives are:
+	  - Disable serial port A
+	  - Use an additional GPIO as chip select signal
+
+endchoice # FIM_ZERO
+
+config FIM_ZERO_SPI
+        bool
+
+if FIM_ZERO_SPI
+
+choice
+	prompt "GPIO pins to use for FIM0 SPI"
+	depends on (MACH_CC9P9215JS || MACH_CCW9P9215JS)
+	help
+	  Choose which set of GPIO pins will be used for the standand SPI
+	  signals CS, MISO, MOSI, and CLK.
+
+config FIM_ZERO_SPI_GPIO_0_TO_3
+	bool "Use GPIO pins 0 to 3"
+	depends on !CC9P9215JS_SERIAL_PORTA && !CC9P9215JS_SPI
+	help
+          Select this option to configuration FIM0 SPI port to use
+          GPIO pins 0, 1, 2, and 3.
+
+config FIM_ZERO_SPI_GPIO_68_TO_71
+        bool "Use GPIO pins 68 to 71"
+	depends on !FIM_ONE_SPI_SELECTED
+        help
+          Select this option to configure FIM0 SPI port to use
+          GPIO pins 68, 69, 70, and 71. If you select this option then
+          you will not be able to use the FIM1 SPI port.
+
+endchoice
+
+config FIM_ZERO_SPI_WANT_MASTER_CS
+    bool "Enable master CS signal from FIM0 SPI port"
+    default y
+	depends on MACH_CC9P9215JS || MACH_CCW9P9215JS || ((MACH_CME9210JS || MACH_CWME9210JS) && !CME9210JS_SERIAL_PORTA)
+    help
+        If you are developing for a cme9210js, then you should probably disable this
+        feature since it uses the same pin as RX data on the cme9210js serial port A.
+        Select this feature to enable the master chip select on the FIM SPI port.
+        If only one SPI slave device is connected to the bus, then this signal
+        can be used as the chip select for it.  If more than one SPI slave is
+        attached, then this signal can be combined with the slave chip selects
+        you select below to provide precise timing for the CS signal.
+
+if FIM_ZERO_SPI_WANT_MASTER_CS
+
+config FIM_ZERO_SPIDEV_MASTER_CS
+    bool "Create SPIDEV interface for master chip select (Chip select 0)"
+    depends on FIM_ZERO_SPI && !FIM_ZERO_SPIDEV_CS0 && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+endif # FIM_ZERO_SPI_WANT_MASTER_CS
+
+config FIM_ZERO_SPI_GPIO_CS
+	bool "Use GPIOs as additional Chip Select signals for FIM0 SPI"
+	help
+	  Enable this option if you need additional SPI Chip Select signals
+	  to control more than one slave device.
+
+if FIM_ZERO_SPI_GPIO_CS
+
+config FIM_ZERO_SPI_CS_0_ENABLED
+    bool "Enable FIM0 SPI Chip Select 0"
+    help
+        Set this value to y if you intend to use the chip select
+        on this port.  This will cause the driver to
+        allocate the GPIO pin assigned to the port when the
+        driver is loaded.
+
+config FIM_ZERO_SPI_CS_0
+    int "GPIO pin for FIM0 SPI chip select 0"
+    depends on FIM_ZERO_SPI_CS_0_ENABLED
+    range 5 7 if PROCESSOR_NS9210
+    default "5" if PROCESSOR_NS9210
+    range 72 87
+    default "72"
+    help
+        Set this value to the GPIO pin number you want to use for chip
+        select 0 on FIM0 SPI port.  This signal is used to select a
+        particular SPI slave device on the SPI bus.
+
+config FIM_ZERO_SPIDEV_CS0
+    bool "Create SPIDEV interface for this port and chip select"
+    depends on FIM_ZERO_SPI_CS_0_ENABLED && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+config FIM_ZERO_SPI_CS_1_ENABLED
+    bool "Enable FIM0 SPI Chip Select 1"
+    help
+        Set this value to y if you intend to use the chip select
+        on this port.  This will cause the driver to
+        allocate the GPIO pin assigned to the port when the
+        driver is loaded.
+
+config FIM_ZERO_SPI_CS_1
+    int "GPIO pin for FIM0 SPI chip select 1"
+    depends on FIM_ZERO_SPI_CS_1_ENABLED
+    range 5 7 if PROCESSOR_NS9210
+    default "6" if PROCESSOR_NS9210
+    range 72 87
+    default "73"
+    help
+        Set this value to the GPIO pin number you want to use for chip
+        select 1 on FIM0 SPI port.  This signal is used to select a
+        particular SPI slave device on the SPI bus.
+
+config FIM_ZERO_SPIDEV_CS1
+    bool "Create SPIDEV interface for this port and chip select"
+    depends on FIM_ZERO_SPI_CS_1_ENABLED && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+config FIM_ZERO_SPI_CS_2_ENABLED
+    bool "Enable FIM0 SPI Chip Select 2"
+    help
+        Set this value to y if you intend to use the chip select
+        on this port.  This will cause the driver to
+        allocate the GPIO pin assigned to the port when the
+        driver is loaded.
+
+config FIM_ZERO_SPI_CS_2
+    int "GPIO pin for FIM0 SPI chip select 2"
+    depends on FIM_ZERO_SPI_CS_2_ENABLED
+    range 5 7 if PROCESSOR_NS9210
+    default "7" if PROCESSOR_NS9210
+    range 72 87
+    default "74"
+    help
+        Set this value to the GPIO pin number you want to use for chip
+        select 2 on FIM0 SPI port.  This signal is used to select a
+        particular SPI slave device on the SPI bus.
+
+config FIM_ZERO_SPIDEV_CS2
+    bool "Create SPIDEV interface for this port and chip select"
+    depends on FIM_ZERO_SPI_CS_2_ENABLED && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+config FIM_ZERO_SPI_CS_3_ENABLED
+    bool "Enable FIM0 SPI Chip Select 3"
+    depends on !MACH_CME9210JS && !MACH_CWME9210JS
+    help
+        Set this value to y if you intend to use the chip select
+        on this port.  This will cause the driver to
+        allocate the GPIO pin assigned to the port when the
+        driver is loaded.
+
+config FIM_ZERO_SPI_CS_3
+    int "GPIO pin for FIM0 SPI chip select 3"
+    depends on FIM_ZERO_SPI_CS_3_ENABLED
+    range 72 87
+    default "75"
+    help
+        Set this value to the GPIO pin number you want to use for chip
+        select 3 on FIM0 SPI port.  This signal is used to select a
+        particular SPI slave device on the SPI bus.
+
+config FIM_ZERO_SPIDEV_CS3
+    bool "Create SPIDEV interface for this port and chip select"
+    depends on FIM_ZERO_SPI_CS_3_ENABLED && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+endif # FIM_ZERO_SPI_GPIO_CS
+
+endif # FIM_ZERO_SPI
+
+config FIM_ONE
+	bool "FIM 1"
+	depends on PROCESSOR_NS9215 && FIM_CORE=y
+	help
+	  Enables FIM 1
+
+choice
+	prompt "Choose FIM 1 driver"
+	depends on FIM_ONE
+	help
+	  Only one of the following drivers can run in the FIM. Please pick one.
+
+config FIM_ONE_SDIO_SELECTED
+	bool "SDIO driver"
+	depends on MMC && MMC_BLOCK
+	depends on (!MACH_CME9210 && !MACH_CME9210JS)
+	depends on !(FIM_ZERO_SDIO_SELECTED && FIM_APPKIT_BOARD)
+	select FIM_ONE_SDIO
+	help
+	  Enables the FIM-SDIO serial driver.
+
+          For testing the SDIO functionality is required to choose an additional
+          SDIO-driver (GPS/UART) from the MMC-core.
+
+config FIM_ONE_SDIO_CD
+	bool "Card Detect for SDIO on FIM 1"
+	depends on FIM_ONE && FIM_ONE_SDIO_SELECTED && !FIM_APPKIT_BOARD
+	help
+	  If using a custom hardware board for using the FIM as SDIO function,
+	  this item lets you specify whether the inteface will support the
+	  Card Detect (CD) functionality using a GPIO.
+
+config FIM_ONE_SDIO_CD_GPIO
+	int "GPIO to use for Card Detect on FIM 1"
+	default 101
+	depends on FIM_ONE_SDIO_CD
+	help
+	  Specify the GPIO number to use for the SDIO Card Detect signal.
+
+config FIM_ONE_SDIO_CD_GPIO_FUNC
+	int "Card Detect GPIO function"
+	default 2
+	depends on FIM_ONE_SDIO_CD
+	help
+	  Specify the GPIO function to configure for the Card Detect GPIO.
+	  If the GPIO is interrupt capable, write here the GPIO's interrupt
+	  function number. Otherwise use 3 for standard GPIO function.
+	  Please refer to the processor's Hardware Reference Manual for
+	  the available GPIOs and functions.
+
+config FIM_ONE_SDIO_WP
+	bool "Write Protect for SDIO on FIM 1"
+	depends on FIM_ONE && FIM_ONE_SDIO_SELECTED && !FIM_APPKIT_BOARD
+	help
+	  If using a custom hardware board for using the FIM as SDIO function,
+	  this item lets you specify whether the inteface will support the
+	  Write Protect (WP) functionality using a GPIO.
+
+config FIM_ONE_SDIO_WP_GPIO
+	int "GPIO to use for Write Protect on FIM 1"
+	default 100
+	depends on FIM_ONE_SDIO_WP
+	help
+	  Specify the GPIO number to use for the SDIO Write Protect signal.
+
+config FIM_ONE_SERIAL_RXTX
+	bool "Serial driver 2-wires (RX/TX)"
+	depends on !MACH_CME9210 && !MACH_CME9210JS && !MACH_CWME9210 && !MACH_CWME9210JS
+	select FIM_ONE_SERIAL_SELECTED
+	help
+	  Enables the FIM-serial driver without the HW flow control (CTS and RTS
+          lines are not requested by the driver).
+
+config FIM_ONE_SERIAL_CTSRTS
+	bool "Serial driver 4-wires (RX/TX/CTS/RTS)"
+	depends on !MACH_CME9210 && !MACH_CME9210JS && !MACH_CWME9210 && !MACH_CWME9210JS
+	select FIM_ONE_SERIAL_SELECTED
+	help
+	  Enables the FIM-serial driver with HW flow control support.
+
+config FIM_ONE_CAN_SELECTED
+	bool "CAN-bus driver"
+	depends on CAN && CAN_DEV && (!MACH_CME9210 && !MACH_CME9210JS && !MACH_CWME9210 && !MACH_CWME9210JS)
+	select FIM_ONE_CAN
+	help
+	  Enables the FIM-CAN bus driver.
+
+config FIM_ONE_W1_SELECTED
+	bool "1-wire driver"
+	depends on !MACH_CME9210 && !MACH_CME9210JS && !MACH_CWME9210 && !MACH_CWME9210JS && !FIM_ZERO_W1_SELECTED
+	select FIM_ONE_W1
+	select W1_MASTER_GPIO
+	help
+	  Enables the 1-wire GPIO driver on the FIM-board. For the selection of the
+	  connected slaves you need to enter the config menu of the 1-wire subsystem.
+
+config FIM_ONE_USB_SELECTED
+        bool "USB serial port driver"
+        depends on !MACH_CME9210JS && !MACH_CWME9210JS
+        select FIM_ONE_USB
+	select SERIAL_CORE
+        help
+          Enables the USB serial port driver (low speed).
+
+config FIM_ONE_SPI_SELECTED
+        bool "SPI driver"
+        depends on SPI && !MACH_CME9210JS && !MACH_CWME9210JS
+	select FIM_ONE_SPI
+        help
+          Enables the SPI port driver on FIM 1.  This interface will always
+          use GPIO pins 68, 69, 70, and 71.
+
+endchoice # FIM_ONE
+
+if FIM_CAN_MODULE || FIM_ZERO_CAN_SELECTED || FIM_ONE_CAN_SELECTED
+config FIM_CAN_DEFAULT_BITRATE
+	int "Default CAN bitrate (in bps)"
+	range 1 1000000
+	default 500000
+	help
+	  This will set the default bitrate for the CAN bus.
+	  This and other CAN settings can be modified using the 'ip'
+	  command of the 'iproute2' suite.
+
+	  For more information refer to Documentation/networking/can.txt
+
+endif # FIM_CAN_MODULE || FIM_ZERO_CAN_SELECTED || FIM_ONE_CAN_SELECTED
+
+if FIM_ONE_SPI
+
+config FIM_ONE_SPI_WANT_MASTER_CS
+    bool "Enable master CS signal from FIM1 SPI port"
+    default y
+    help
+        Select this feature to enable the master chip select on the FIM SPI port.
+        If only one SPI slave device is connected to the bus, then this signal
+        can be used as the chip select for it.  If more than one SPI slave is
+        attached, then this signal can be combined with the slave chip selects
+        you select below to provide precise timing for the CS signal.
+
+if FIM_ONE_SPI_WANT_MASTER_CS
+
+config FIM_ONE_SPIDEV_MASTER_CS
+    bool "Create SPIDEV interface for master chip select (Chip select 0)"
+    depends on FIM_ONE_SPI && !FIM_ONE_SPIDEV_CS0 && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+endif # FIM_ONE_SPI_WANT_MASTER_CS
+
+config FIM_ONE_SPI_GPIO_CS
+	bool "Use GPIOs as additional Chip Select signals for FIM1 SPI"
+	help
+	  Enable this option if you need additional SPI Chip Select signals
+	  to control more than one slave device.
+
+if FIM_ONE_SPI_GPIO_CS
+
+config FIM_ONE_SPI_CS_0_ENABLED
+    bool "Enable FIM1 SPI Chip Select 0"
+    help
+        Set this value to y if you intend to use the chip select
+        on this port.  This will cause the driver to
+        allocate the GPIO pin assigned to the port when the
+        driver is loaded.
+
+config FIM_ONE_SPI_CS_0
+    int "GPIO pin for FIM1 SPI chip select 0"
+    depends on FIM_ONE_SPI_CS_0_ENABLED
+    range 72 87
+    default "76"
+    help
+        Set this value to the GPIO pin number you want to use for chip
+        select 0 on FIM1 SPI port.  This signal is used to select a
+        particular SPI slave device on the SPI bus.
+
+config FIM_ONE_SPIDEV_CS0
+    bool "Create SPIDEV interface for this port and chip select"
+    depends on FIM_ONE_SPI_CS_0_ENABLED && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+config FIM_ONE_SPI_CS_1_ENABLED
+    bool "Enable FIM1 SPI Chip Select 1"
+    help
+        Set this value to y if you intend to use the chip select
+        on this port.  This will cause the driver to
+        allocate the GPIO pin assigned to the port when the
+        driver is loaded.
+
+config FIM_ONE_SPI_CS_1
+    int "GPIO pin for FIM1 SPI chip select 1"
+    depends on FIM_ONE_SPI_CS_1_ENABLED
+    range 72 87
+    default "77"
+    help
+        Set this value to the GPIO pin number you want to use for chip
+        select 1 on FIM1 SPI port.  This signal is used to select a
+        particular SPI slave device on the SPI bus.
+
+config FIM_ONE_SPIDEV_CS1
+    bool "Create SPIDEV interface for this port and chip select"
+    depends on FIM_ONE_SPI_CS_1_ENABLED && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+config FIM_ONE_SPI_CS_2_ENABLED
+    bool "Enable FIM1 SPI Chip Select 2"
+    help
+        Set this value to y if you intend to use the chip select
+        on this port.  This will cause the driver to
+        allocate the GPIO pin assigned to the port when the
+        driver is loaded.
+
+config FIM_ONE_SPI_CS_2
+    int "GPIO pin for FIM1 SPI chip select 2"
+    depends on FIM_ONE_SPI_CS_2_ENABLED
+    range 72 87
+    default "78"
+    help
+        Set this value to the GPIO pin number you want to use for chip
+        select 2 on FIM1 SPI port.  This signal is used to select a
+        particular SPI slave device on the SPI bus.
+
+config FIM_ONE_SPIDEV_CS2
+    bool "Create SPIDEV interface for this port and chip select"
+    depends on FIM_ONE_SPI_CS_2_ENABLED && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+config FIM_ONE_SPI_CS_3_ENABLED
+    bool "Enable FIM1 SPI Chip Select 3"
+    help
+        Set this value to y if you intend to use the chip select
+        on this port.  This will cause the driver to
+        allocate the GPIO pin assigned to the port when the
+        driver is loaded.
+
+config FIM_ONE_SPI_CS_3
+    int "GPIO pin for FIM1 SPI chip select 2"
+    depends on FIM_ONE_SPI_CS_3_ENABLED
+    range 72 87
+    default "79"
+    help
+        Set this value to the GPIO pin number you want to use for chip
+        select 3 on FIM1 SPI port.  This signal is used to select a
+        particular SPI slave device on the SPI bus.
+
+config FIM_ONE_SPIDEV_CS3
+    bool "Create SPIDEV interface for this port and chip select"
+    depends on FIM_ONE_SPI_CS_3_ENABLED && SPI_SPIDEV
+    help
+        Select this feature if you want to create a SPIDEV device for this
+        port and chip select which will be visible to user level programs.
+	Deselect this feature if this port and chip select will be used
+	by a different device driver.
+
+endif # FIM_ONE_SPI_GPIO_CS
+
+endif # FIM_ONE_SPI
+
+
+
+# -- Special configuration options for some FIM-drivers
+config SERIAL_FIM_CONSOLE
+        bool "Enable the FIM Serial Console"
+        depends on FIM_ZERO_SERIAL_SELECTED || FIM_ONE_SERIAL_SELECTED
+	select SERIAL_CORE_CONSOLE
+        help
+          Enables the console functionality on the FIM serial ports.
+
+# -- Variables for selection the platform devices
+config FIM_ZERO_SDIO
+	bool
+
+config FIM_ONE_SDIO
+	bool
+
+config FIM_ZERO_SERIAL
+	bool
+
+config FIM_ZERO_SERIAL_SELECTED
+        select FIM_ZERO_SERIAL
+	select SERIAL_CORE
+	bool
+
+config FIM_ONE_SERIAL
+	bool
+
+config FIM_ONE_SERIAL_SELECTED
+        select FIM_ONE_SERIAL
+	select SERIAL_CORE
+	bool
+
+config FIM_ZERO_CAN
+	bool
+
+
+
+config FIM_ONE_CAN
+	bool
+
+config FIM_ZERO_W1
+        bool
+
+config FIM_ONE_W1
+        bool
+
+config FIM_ZERO_USB
+        bool
+
+config FIM_ONE_USB
+        bool
+
+config FIM_ONE_SPI
+        bool
+
+
+
+endif # FIM_CORE
+

@@ -1,0 +1,73 @@
+#
+# PWM infrastructure and devices
+#
+
+menuconfig GENERIC_PWM
+	tristate "PWM Support"
+	help
+	  This enables PWM support through the generic PWM library.
+	  If unsure, say N.
+
+if GENERIC_PWM
+
+config ATMEL_PWM
+	tristate "Atmel AT32/AT91 PWM support"
+	depends on AVR32 || ARCH_AT91
+	help
+	  This option enables device driver support for the PWMC
+	  peripheral channels found on certain Atmel processors.
+	  Pulse Width Modulation is used many for purposes, including
+	  software controlled power-efficent backlights on LCD
+	  displays, motor control, and waveform generation.  If
+	  unsure, say N.
+
+config NS921X_PWM
+	tristate "Digi NS921X PWM support"
+	depends on PROCESSOR_NS9215 && !CC9P9215JS_SERIAL_PORTA && !CC9P9215JS_SPI && !CC9P9215JS_SERIAL_PORTC_CTSRTSRXTX && !CC9P9215JS_SERIAL_PORTC_FULL
+	help
+	  This option enables device driver support for the PWMC
+	  peripheral channels found on certain NetSilicon processors.
+	  Pulse Width Modulation is used many for purposes, including
+	  software controlled power-efficent backlights on LCD
+	  displays, motor control, and waveform generation.  If
+	  unsure, say N.
+
+config S3C2443_PWM
+	tristate "Digi S3C2443 PWM support"
+	depends on MACH_CC9M2443JS || MACH_CCW9M2443JS
+	help
+	  This option enables device driver support for the PWM
+	  timers on S3C2443 processor.
+	  Pulse Width Modulation is used many for purposes, including
+	  software controlled power-efficent backlights on LCD
+	  displays, motor control, and waveform generation.  If
+	  unsure, say N.
+
+config S3C2443_PWM_PRESCALER_0
+	int "Prescaler 0 (for timers 0 and 1)"
+	range 0 255
+	default 2
+	depends on S3C2443_PWM
+	help
+	  This value sets the prescaler 0 shared by PWM timers 0 and 1.
+	  Allowed values range between 0 and 255, and the period that can
+	  be generated can be calculated using these formulas:
+
+            max_period = (65535 * 16 * (prescaler + 1) / PCLK)
+
+	    min_period = (2 * 2 * (prescaler + 1) / PCLK)
+
+          For example, for a PCLK of 66.75MHz and a prescaler of 2
+	  the maximum period is 47.12 ms, and the minimum is 180 ns.
+
+	  NOTE: Prescaler 1 (shared by timers 2, 3, and 4) cannot be
+	  modified because timer 4 is used as system timer with a
+	  fixed prescaler of 2.
+
+config MXS_PWM
+	tristate "Freescale MXS PWM support"
+	depends on ARCH_MXS
+	help
+	  Generic PWM driver for Freescale MXS.
+
+endif

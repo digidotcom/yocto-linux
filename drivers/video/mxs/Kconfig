@@ -1,0 +1,16 @@
+config FB_MXS
+	tristate "MXS Framebuffer driver"
+	depends on FB && ARCH_MXS
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	default y
+	---help---
+	  Say Y here to enable support for the framebuffer driver for the
+	  Freescale MXS Board.
+
+config FB_MXS_TVENC
+	depends on ARCH_MXS
+	bool "TVENC"
+	---help---
+	  Use TVOUT encoder for MXS

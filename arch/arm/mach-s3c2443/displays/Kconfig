@@ -1,0 +1,37 @@
+# arch/arm/mach-s3c2443/displays/Kconfig
+#
+# Copyright 2009 Digi International Inc
+#
+
+if FB_S3C2443_TFT
+
+comment "Display selection"
+
+config CC9M2443_VGA
+	bool "CRT VGA video support"
+	def_bool y
+	help
+	  This enables the video support for the VGA intrface.
+
+config CC9M2443_LQ057Q3DC12I
+	bool "LQ057Q3DC12I TFT LCD support"
+	help
+	  This enables the support for the LQ057Q3DC12I TFT display.
+
+config CC9M2443_LQ064V3DG01
+	bool "LQ064V3DG01 TFT LCD support"
+	help
+	  This enables the support for the LQ064V3DG01 TFT display.
+
+config CC9M2443_LQ070Y3DG3B1
+	bool "LQ070Y3DG3B1 TFT LCD support"
+	help
+	  This enables the support for the LQ070Y3DG3B1 TFT display.
+
+config CC9M2443_CUSTOM
+	bool "Custom display support"
+	help
+	  This enables the support for a customer specific display.
+	  displays/CUSTOM.h has to be modified when selecting this.
+
+endif

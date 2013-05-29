@@ -1,0 +1,12 @@
+
+README
+------
+
+[HOST]
+* Need to add a rule to udev for changing the write access to the
+  different device nodes (per default only root has write access)
+* Use the python script for writing to the EP by using libusb
+
+[TARGET]
+* Add a hotplug rull for starting an application that reads the
+  data from the serial port

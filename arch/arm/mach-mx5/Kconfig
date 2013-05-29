@@ -1,0 +1,771 @@
+if ARCH_MX5
+
+config ARCH_MX51
+	bool "MX51"
+	select USB_ARCH_HAS_EHCI
+	select MXC_TZIC
+	select ARCH_MXC_IOMUX_V3
+
+config ARCH_MX53
+	bool "MX53"
+	select USB_ARCH_HAS_EHCI
+	select MXC_TZIC
+	select ARCH_MXC_IOMUX_V3
+
+config ARCH_MX50
+	bool
+	select ARCH_HAS_RNGC
+
+config FORCE_MAX_ZONEORDER
+    int "MAX_ORDER"
+    default "13"
+
+config MX5_MULTI_ARCH
+	bool
+	default y
+	select RUNTIME_PHYS_OFFSET
+	depends on ARCH_MX51
+	depends on ARCH_MX50 || ARCH_MX53
+
+config MACH_MX51_3DS
+	bool "Support MX51 3-Stack platform"
+	select ARCH_MX51
+	help
+	  Include support for MX51 3-Stack platform. This includes specific
+	  configurations for the board and its peripherals.
+
+config MACH_MX51_BABBAGE
+	bool "Support MX51 BABBAGE platforms"
+	select ARCH_MX51
+	help
+	  Include support for MX51 Babbage platform, also known as MX51EVK in
+	  u-boot. This includes specific configurations for the board and its
+	  peripherals.
+
+config MODULE_CCIMX5X
+	bool
+
+config MODULE_CCIMX51
+	select MODULE_CCIMX5X
+	bool
+
+config LATE_CPU_CLK_ENABLE
+	bool
+
+config MACH_CCIMX51JS
+	bool "Support for the ConnectCore for MX51 module, on the JSK base board"
+	select MODULE_CCIMX51
+	select LATE_CPU_CLK_ENABLE
+	select WEXT_PRIV if WIRELESS
+	select WEXT_SPY if WIRELESS
+	help
+	  Include support for the Digi ConnectCore Wi-i.MX51 Embedded Module, on the
+	  JumpStart Kit base board. This includes specific configurations for the
+	  peripherals on that base board.
+
+config MACH_CCIMX51
+	bool "Support for the ConnectCore for MX51 module"
+	select MODULE_CCIMX51
+	select LATE_CPU_CLK_ENABLE
+	select WEXT_PRIV if WIRELESS
+	select WEXT_SPY if WIRELESS
+	help
+	  Include support for the Digi ConnectCore Wi-i.MX51 Embedded Module, on a
+	  custom board. The machine file should be modified to include support for
+	  the interfaces available in that board.
+
+choice
+	prompt "Select development board variant:"
+	default JSCCIMX51_V2
+
+config JSCCIMX51_V1
+	bool "ConnectCore for i.MX51 Early Availability Development Board"
+	depends on MODULE_CCIMX51
+	select CCIMX5X_DISP0_RGB888 if CCIMX5X_DISP0
+	help
+	  Select this option if you are using the development board included in
+	  the Early Availability (EA) kit. The Digi part number for this board
+	  revision is 30011032-01. It is printed on the top side of the
+	  development board, close to the connectors of Signal Rail 1.
+
+config JSCCIMX51_V2
+	bool "ConnectCore for i.MX51 JumpStart Kit Development Board"
+	depends on MODULE_CCIMX51
+	select CCIMX5X_DISP0_RGB666 if CCIMX5X_DISP0
+	help
+	  Select this option if you are using the development board included in
+	  Digi JumpStart Kit. The Digi part number for this board revision is
+	  30011032-03. It is printed on the top side of the development board,
+	  close to the connectors of Signal Rail 1.
+
+config JSCCIMX51_CUSTOM
+	bool "Custom ConnectCore for i.MX51 Carrier Board"
+	depends on MODULE_CCIMX51
+	help
+	  Select this option if you are using your own custom-designed carrier
+	  board.
+
+endchoice
+
+config MACH_MX53_EVK
+	bool "Support MX53 EVK platform"
+	select ARCH_MX53
+	help
+	  Include support for MX53 EVK platform. This includes specific
+	  configurations for the board and its peripherals.
+
+config MACH_MX53_ARD
+	bool "Support MX53 ARD platform"
+	select ARCH_MX53
+	help
+	  Include support for MX53 ARD platform. This includes specific
+	  configurations for the board and its peripherals.
+
+config MACH_MX53_SMD
+	bool "Support MX53 SMD platform"
+	select ARCH_MX53
+	help
+	  Include support for MX53 SMD platform. This includes specific
+	  configurations for the board and its peripherals.
+
+config MACH_MX53_LOCO
+	bool "Support MX53 LOCO platform"
+	select ARCH_MX53
+	help
+	  Include support for MX53 LOCO platform. This includes specific
+	  configurations for the board and its peripherals.
+
+config I2C_IMX_RECOVER_FROM_STUCK
+	bool
+
+config MODULE_CCIMX53
+	bool
+	select MODULE_CCIMX5X
+	select I2C_IMX_RECOVER_FROM_STUCK
+
+config MACH_CCIMX53JS
+	bool "Support for the ConnectCore for MX53 module, on the JSK base board"
+	select MODULE_CCIMX53
+	select WEXT_PRIV if WIRELESS
+	select WEXT_SPY if WIRELESS
+	help
+	  Include support for the Digi ConnectCore for MX53 Embedded Module, on the
+	  JumpStart Kit base board. This includes specific configurations for the
+	  peripherals on that base board.
+
+config MACH_CCIMX53
+	bool "Support for the ConnectCore for MX53 module"
+	select MODULE_CCIMX53
+	select WEXT_PRIV if WIRELESS
+	select WEXT_SPY if WIRELESS
+	help
+	  Include support for the Digi ConnectCore  for MX53 Embedded Module, on a
+	  custom board. The machine file should be modified to include support for
+	  the interfaces available in that board.
+
+choice
+	prompt "Select development board variant:"
+	default JSCCIMX53_V2
+
+config CERTMX53_V1
+	bool "ConnectCore for MX53 Certification Board"
+	depends on MODULE_CCIMX53
+	help
+	  Select this option if you are using the ConnectCore  for MX53 Certification
+	  Board.
+
+config JSCCIMX53_V2
+	bool "ConnectCore for MX53 JumpStart Kit Development Board"
+	depends on MODULE_CCIMX53
+	help
+	  Select this option if you are using the development board included in
+	  Digi JumpStart Kit.
+
+config JSCCIMX53_CUSTOM
+	bool "Custom ConnectCore for MX53 Carrier Board"
+	depends on MODULE_CCIMX53
+	help
+	  Select this option if you are using your own custom-designed carrier
+	  board.
+
+endchoice
+
+config MACH_MX50_ARM2
+	bool "Support MX50 Armadillo2 platform"
+	select ARCH_MX50
+	help
+	  Include support for MX50 EVK platform. This includes specific
+	  configurations for the board and its peripherals.
+
+config MACH_MX50_RDP
+	bool "Support MX50 Reference Design Platform"
+	select ARCH_MX50
+	help
+	  Include support for MX50 RDP platform. This includes specific
+	  configurations for the board and its peripherals.
+
+comment "MX5x Options:"
+
+config MXC_SDMA_API
+        bool "Use SDMA API"
+        default y
+        help
+           This selects the Freescale MXC SDMA API.
+           If unsure, say N.
+
+config MXC_NAND_SWAP_BI
+	bool
+
+config ARCH_MXC_HAS_NFC_V3
+        bool "MXC NFC Hardware Version 3"
+        depends on ARCH_MX5
+        default y
+        help
+           This selects the Freescale MXC Nand Flash Controller Hardware Version 3
+           If unsure, say N.
+
+config ARCH_MXC_HAS_NFC_V3_2
+        bool "MXC NFC Hardware Version 3.2"
+        depends on ARCH_MXC_HAS_NFC_V3
+	select MXC_NAND_SWAP_BI if MODULE_CCIMX5X
+        default y
+        help
+           This selects the Freescale MXC Nand Flash Controller Hardware Version 3.2
+           If unsure, say N.
+
+config SDMA_IRAM
+	bool "Use Internal RAM for SDMA transfer"
+	depends on MXC_SDMA_API
+	help
+	  Support Internal RAM as SDMA buffer or control structures
+
+config MXC_BLUETOOTH_RFKILL
+       tristate "MXC Bluetooth rfkill interface support"
+       depends on RFKILL
+       ---help---
+	Say Y to get the standard rfkill interface of Bluetooth
+
+config MXC_ENABLE_WARM_RESET
+        bool "Enable warm reset"
+        default n
+        help
+           This makes reset sources to be warm resets. Select if you need
+           memory persistency across reboots.
+
+           If not sure, say N.
+
+config CCIMX5X_PM_POWER_BUTTON
+        bool "Enable power button for suspend/resume to RAM"
+        depends on MODULE_CCIMX51 || (MODULE_CCIMX53 && (INPUT_DA9052_ONKEY || INPUT_DA9052_ONKEY_MODULE))
+        default y
+        help
+           This option will enable the usage of the power button to suspend
+           and wake up the device. With this set, the target will always have
+           the power button enabled as a wake up source.
+
+endif
+
+menu "Serial Port Options"
+
+choice
+	prompt "Configure Early Serial Console"
+	default CONSOLE_UART1 if MODULE_CCIMX53
+	default CONSOLE_UART2 if MODULE_CCIMX51
+	depends on SERIAL_MXC
+
+config CONSOLE_UART1
+	bool "Early Serial Console on UART1"
+	depends on UART1_ENABLED
+
+config CONSOLE_UART2
+	bool "Early Serial Console on UART2"
+	depends on UART2_ENABLED
+
+config CONSOLE_UART3
+	bool "Early Serial Console on UART3"
+	depends on UART3_ENABLED
+
+config CONSOLE_UART4
+	bool "Early Serial Console on UART4"
+	depends on UART4_ENABLED
+
+config CONSOLE_UART5
+	bool "Early Serial Console on UART5"
+	depends on UART5_ENABLED
+
+endchoice
+
+config UART1_ENABLED
+	bool "Enable UART1"
+	default y
+	depends on SERIAL_MXC
+	depends on MODULE_CCIMX53 || MODULE_CCIMX51
+	help
+	  Enable the MX5X UART1 interface
+
+choice
+	prompt "Select the mode:"
+	default UART1_MODE_STANDARD
+	depends on UART1_ENABLED
+
+config UART1_MODE_STANDARD
+	bool "Configure for standard operational mode (RS232)"
+
+config UART1_MODE_IRDA
+	bool "Configure for IRDA operation"
+
+config UART1_MODE_RS485
+	bool "Configure for RS485-half duplex (automatically handles RTS for the RS485 direction)"
+	depends on MODULE_CCIMX51 || (MODULE_CCIMX53 && !ESDHCI_MXC_SELECT3)
+endchoice
+
+comment "UART1 RS485 mode is not available on the ConnectCore Wi-i.MX53 JumpStart board if"
+	  depends on MODULE_CCIMX53 && ESDHCI_MXC_SELECT3
+comment "the support for the SD Host Controller 3 is enabled."
+	  depends on MODULE_CCIMX53 && ESDHCI_MXC_SELECT3
+
+choice
+	prompt "Select the configuration for the UART lines:"
+	default UART1_2WIRE_ENABLED
+	depends on UART1_ENABLED
+	depends on UART1_MODE_STANDARD
+
+config UART1_2WIRE_ENABLED
+	bool "Configure UART1 as 2 wire UART (RX/TX)"
+
+config UART1_CTS_RTS_ENABLED
+	bool "Configure UART1 as 4 wire UART (RX/TX/RTS/CTS)"
+	depends on MODULE_CCIMX51 || (MODULE_CCIMX53 && !ESDHCI_MXC_SELECT3)
+
+config UART1_FULL_UART_ENABLED
+	bool "Configure UART1 as full UART (RX/TX/RTS/CTS/DCD/DTR/DSR/RI)"
+	depends on MODULE_CCIMX51 || (MODULE_CCIMX53 && !ESDHCI_MXC_SELECT3)
+		depends on MODULE_CCIMX51 || (MODULE_CCIMX53 && !SMSC911X)
+endchoice
+
+comment "UART1 CTS/RTS is not available on the ConnectCore Wi-i.MX53 JumpStart board if"
+	  depends on MODULE_CCIMX53 && ESDHCI_MXC_SELECT3
+comment "the support for the SD Host Controller 3 is enabled."
+	  depends on MODULE_CCIMX53 && ESDHCI_MXC_SELECT3
+
+comment "UART1 FULL UART is not available on the ConnectCore Wi-i.MX53 JumpStart board if"
+	  depends on MODULE_CCIMX53 && SMSC911X
+comment "the support for the SMSC LAN911x/LAN921x is enabled."
+	  depends on MODULE_CCIMX53 && SMSC911X
+
+config UART2_ENABLED
+	bool "Enable UART2"
+	default y
+	depends on SERIAL_MXC
+	depends on MODULE_CCIMX53 || MODULE_CCIMX51
+	help
+	  Enable the MX5X UART2 interface
+
+choice
+	prompt "Select the mode:"
+	default UART2_MODE_STANDARD
+	depends on UART2_ENABLED
+
+config UART2_MODE_STANDARD
+	bool "Configure for standard operational mode (RS232)"
+
+config UART2_MODE_IRDA
+	bool "Configure for IRDA operation"
+
+config UART2_MODE_RS485
+	bool "Configure for RS485-half duplex (automatically handles RTS for the RS485 direction)"
+endchoice
+
+config UART2_CTS_RTS_ENABLED
+	bool "Configure RTS/CTS lines for UART2 hardware flow control"
+	default n
+	depends on UART2_ENABLED
+	depends on UART2_MODE_STANDARD
+	depends on MODULE_CCIMX53 || (MODULE_CCIMX51 && !USB_EHCI_ARC_H1)
+	help
+	  Configure the UART2 RTS/CTS lines for hardware flow control operation
+
+comment "UART2 CTS/RTS is not available on the ConnectCore Wi-i.MX51 JumpStart board if"
+	  depends on MODULE_CCIMX51 && USB_EHCI_ARC_H1
+comment "the support for Host1 of the Freescale USB controller is enabled."
+	  depends on MODULE_CCIMX51 && USB_EHCI_ARC_H1
+
+comment "UART3 is not available on the ConnectCore Wi-i.MX51 JumpStart board if UART1"
+	  depends on MODULE_CCIMX51 && UART1_FULL_UART_ENABLED
+comment "is configured as full UART. This may not be the case in a custom base board."
+	  depends on MODULE_CCIMX51 && UART1_FULL_UART_ENABLED
+
+config UART3_ENABLED
+	bool "Enable UART3"
+	default y
+	depends on SERIAL_MXC
+	depends on (MODULE_CCIMX51 && !UART1_FULL_UART_ENABLED) || MODULE_CCIMX53
+	help
+	  Enable the MX51 UART3 interface
+
+choice
+	prompt "Select the mode:"
+	default UART3_MODE_STANDARD
+	depends on UART3_ENABLED
+
+config UART3_MODE_STANDARD
+	bool "Configure for standard operational mode (RS232)"
+
+config UART3_MODE_IRDA
+	bool "Configure for IRDA operation"
+
+config UART3_MODE_RS485
+	bool "Configure for RS485-half duplex (automatically handles RTS for the RS485 direction)"
+endchoice
+
+config UART3_CTS_RTS_ENABLED
+	bool "Configure RTS/CTS lines for UART3 hardware flow control"
+	default n
+	depends on UART3_ENABLED
+	depends on UART3_MODE_STANDARD
+	help
+	  Configure the UART3 RTS/CTS lines for hardware flow control operation
+
+config UART4_ENABLED
+	bool "Enable UART4"
+	default y
+	depends on SERIAL_MXC && MODULE_CCIMX53
+	help
+	  Enable the MX53 UART4 interface
+
+choice
+	prompt "Select the mode:"
+	default UART4_MODE_STANDARD
+	depends on UART4_ENABLED
+
+config UART4_MODE_STANDARD
+	bool "Configure for standard operational mode (RS232)"
+
+config UART4_MODE_IRDA
+	bool "Configure for IRDA operation"
+
+config UART4_MODE_RS485
+	bool "Configure for RS485-half duplex (automatically handles RTS for the RS485 direction)"
+endchoice
+
+config UART4_IRDA_ENABLED
+	bool "Enable IRDA mode"
+	default n
+	depends on UART4_ENABLED
+	help
+	  Enable IRDA mode
+
+config UART4_CTS_RTS_ENABLED
+	bool "Configure RTS/CTS lines for UART4 hardware flow control"
+	default n
+	depends on UART4_ENABLED
+	depends on UART4_MODE_STANDARD
+	help
+	  Configure the UART4 RTS/CTS lines for hardware flow control operation
+
+config UART5_ENABLED
+	bool "Enable UART5"
+	default y
+	depends on SERIAL_MXC && MODULE_CCIMX53
+	help
+	  Enable the MX53 UART5 interface
+
+choice
+	prompt "Select the mode:"
+	default UART5_MODE_STANDARD
+	depends on UART5_ENABLED
+
+config UART5_MODE_STANDARD
+	bool "Configure for standard operational mode (RS232)"
+
+config UART5_MODE_IRDA
+	bool "Configure for IRDA operation"
+
+config UART5_MODE_RS485
+	bool "Configure for RS485-half duplex (automatically handles RTS for the RS485 direction)"
+endchoice
+
+config UART5_CTS_RTS_ENABLED
+	bool "Configure RTS/CTS lines for UART5 hardware flow control"
+	default n
+	depends on UART5_ENABLED
+	depends on UART5_MODE_STANDARD
+	help
+	  Configure the UART5 RTS/CTS lines for hardware flow control operation
+
+endmenu
+
+menu "SPI Interface Options"
+config SPI_MXC_SELECT1
+	bool "Enable CSPI1"
+	depends on SPI_MXC && ( MODULE_CCIMX51 || MODULE_CCIMX53 )
+	default y
+	help
+	  Enable the CSPI1 interface
+
+config SPI_MXC_SELECT1_SS1
+	bool "Enable SS1 line for CSPI1"
+	depends on SPI_MXC_SELECT1 && MODULE_CCIMX51
+	default y
+	help
+          Enable SS1 (slave select 1) line, used on ConnectCore Wi-i.MX51 base board SPI connector
+
+config SPI_MXC_SELECT2
+	bool "Enable CSPI2"
+	depends on SPI_MXC && MODULE_CCIMX51
+	default n
+	help
+	  Enable the CSPI2 interface
+
+config SPI_MXC_SELECT3
+	bool "Enable CSPI3"
+	depends on SPI_MXC && MODULE_CCIMX51
+	default n
+	help
+	  Enable the CSPI3 interface
+endmenu
+
+menu "I2C Interface options"
+
+config I2C_MX_SELECT1
+	bool "Enable I2C1 module"
+	default n
+	depends on I2C_MXC || I2C_IMX
+	depends on !MODULE_CCIMX51
+	help
+	  Enable MX51/MX53 I2C1 module.
+choice
+	prompt "I2C1 speed"
+	default CONFIG_MXC_I2C1_FAST
+	depends on I2C_MX_SELECT1
+
+config CONFIG_MXC_I2C1_STANDARD
+	bool "Standard (100 KHz)"
+
+config CONFIG_MXC_I2C1_FAST
+	bool "Fast (400 KHz)"
+endchoice
+
+config I2C_MX_SELECT2
+	bool "Enable I2C2 module"
+	default n
+	depends on I2C_MXC || I2C_IMX
+	help
+	  Enable MX51/MX53 I2C2 module.
+
+choice
+	prompt "I2C2 speed"
+	default CONFIG_MXC_I2C2_FAST
+	depends on I2C_MX_SELECT2
+
+config CONFIG_MXC_I2C2_STANDARD
+	bool "Standard (100 KHz)"
+
+config CONFIG_MXC_I2C2_FAST
+	bool "Fast (400 KHz)"
+endchoice
+
+config I2C_MX_SELECT3
+	bool "Enable I2C3 module"
+	default n
+	depends on I2C_MXC || I2C_IMX
+	depends on !MODULE_CCXMX51
+	help
+	  Enable MX51/MX53 I2C3 module.
+
+choice
+	prompt "I2C3 speed"
+	default CONFIG_MXC_I2C3_FAST
+	depends on I2C_MX_SELECT3
+
+config CONFIG_MXC_I2C3_STANDARD
+	bool "Standard (100 KHz)"
+
+config CONFIG_MXC_I2C3_FAST
+	bool "Fast (400 KHz)"
+endchoice
+
+endmenu
+
+menu "CAN Port Options"
+	depends on CAN_FLEXCAN && MODULE_CCIMX53
+
+config CCIMX53_CAN1
+	bool "Enable CAN1 port"
+	default y
+	help
+	  Enables port CAN1 of the CPU
+
+config CCIMX53_CAN2
+	bool "Enable CAN2 port"
+	default y
+	help
+	  Enables port CAN2 of the CPU
+
+endmenu
+
+menu "SD/MMC Interface options"
+
+config ESDHCI_MXC_SELECT1
+	bool "Enable SDHC 1"
+	default y
+	depends on MMC_IMX_ESDHCI
+        depends on MACH_CCIMX51JS || \
+	    MACH_CCIMX53JS && !WIRELESS
+	help
+	  Enable the SD Host Controller 1.
+
+config ESDHCI_MXC_SELECT2
+	bool "Enable SDHC 2"
+	default y
+	depends on MMC_IMX_ESDHCI
+	depends on MACH_CCIMX53JS || \
+            MACH_CCIMX51JS && !WIRELESS
+	help
+	  Enable the SD Host Controller 2.
+
+config ESDHCI_MXC_SELECT3
+	bool "Enable SDHC 3"
+	default y
+	depends on MMC_IMX_ESDHCI
+	help
+	  Enable the SD Host Controller 3.
+
+config ESDHCI_MXC_SELECT4
+	bool "Enable SDHC 4"
+	default y
+	depends on MMC_IMX_ESDHCI
+	depends on !MACH_CCIMX51JS
+	depends on !MACH_CCIMX53JS
+	help
+	  Enable the SD Host Controller 4.
+
+endmenu
+
+if !FB_MXC_SYNC_PANEL
+comment "---Video interface disabled"
+endif
+
+if FB_MXC_SYNC_PANEL
+menu "Video Interface(s)"
+
+choice
+	prompt "Video color depth"
+	default CCIMX5X_DEFAULT_VIDEO_32BPP
+	depends on MODULE_CCIMX5X
+
+config CCIMX5X_DEFAULT_VIDEO_32BPP
+	bool "32 bits per pixel"
+
+config CCIMX5X_DEFAULT_VIDEO_16BPP
+	bool "16 bits per pixel"
+endchoice
+
+config CCIMX5X_DEFAULT_VIDEO_BPP
+	int
+	depends on MODULE_CCIMX5X
+	default 32 if CCIMX5X_DEFAULT_VIDEO_32BPP
+	default 16 if CCIMX5X_DEFAULT_VIDEO_16BPP
+
+config CCIMX5X_DISP0
+	bool "Enable Display Interface 1 (primary)"
+	help
+	  This enables the i.MX51/i.MX53 Display Interface 1.
+
+if CCIMX5X_DISP0
+choice
+	prompt "Display 1 color mode"
+
+config CCIMX5X_DISP0_RGB888
+	bool "24bit color mode"
+	depends on JSCCIMX51_V1 || MODULE_CCIMX53
+	help
+	  Configure Display 1 in 24bit color mode.
+
+	  NOTE for the ConnectCore Wi-i.MX51/i.MX51
+
+	    The JumpStart Kit Development Board (30011032-02) is designed
+	    to work in 18bit mode. To work in 24bit mode you need an Early
+	    Availability Kit Development Board (30011032-01) or a custom
+	    designed board that populates all 24 data lines of the video
+	    interface.
+	    IMPORTANT: On the ConnectCore Wi-i.MX51/i.MX51 if the Display 1
+	    is configured for 24bit color depth, the Display 2 will not be
+	    available.
+
+config CCIMX5X_DISP0_RGB666
+	bool "18bit color mode"
+	depends on JSCCIMX51_V2 || MODULE_CCIMX53
+	help
+	  Configure Display 1 in 18bit color mode.
+
+	  NOTE for the ConnectCore Wi-i.MX51/i.MX51
+
+	    Use this mode if working on a JumpStart Kit Development Board.
+	    The Early Availability Development Board (30011032-01) is
+	    designed to work in 24bit mode. To work in 18bit mode you need a
+	    JumpStart Kit Development Board (30011032-02) or a custom designed
+	    board that only populates 18 data lines of the video interface.
+endchoice
+endif
+
+comment "To enable the Display 2 Video interface, disable the FEC (under network drivers)"
+	  depends on (FEC || CCIMX5X_DISP0_RGB888) && MODULE_CCIMX51
+comment "and set 18bit color mode for the Display 1"
+	  depends on (FEC || CCIMX5X_DISP0_RGB888) && MODULE_CCIMX51
+
+config CCIMX5X_DISP1
+	bool "Enable Display Interface 2 (secondary)"
+	depends on (!FEC && !CCIMX5X_DISP0_RGB888) && MODULE_CCIMX51 || MODULE_CCIMX53
+	help
+	  This enables the i.MX51 Display Interface 2.
+	  Note that, on the ConnectCore Wi-i.MX51/i.MX51 this interface can only work in
+	  18bit color mode.
+
+if CCIMX5X_DISP1
+choice
+	prompt "Display 2 color mode"
+
+config CCIMX5X_DISP1_RGB888
+	bool "24bit color mode"
+	depends on MODULE_CCIMX53
+	help
+	  Configure Display 1 in 24bit color mode.
+
+config CCIMX5X_DISP1_RGB666
+	bool "18bit color mode"
+	depends on MODULE_CCIMX53
+	help
+	  Configure Display 1 in 18bit color mode.
+endchoice
+endif
+
+config CCIMX5X_SECOND_TOUCH
+	bool "Enable support for external touch controller (ADS7843)"
+	depends on SPI_MXC_SELECT1
+	depends on !CCIMX5X_FUSION_4_MULTITOUCH
+	depends on !CCIMX5X_FUSION_7_10_MULTITOUCH
+	select TOUCHSCREEN_ADS7846
+	help
+	  This enables the support for the external touch interface (ADS7843) available on the
+	  High Resolution Display board, connected to the processor through SPI and that can be
+	  used with the secondary display (but also with the primary)
+
+config CCIMX5X_FUSION_4_MULTITOUCH
+	bool "Enable support for the Fusion 4 multi-touchscreen controller on the JSK board"
+	depends on (I2C_MXC || I2C_IMX) && (JSCCIMX53_V2 || JSCCIMX51_V2)
+	select TOUCHSCREEN_FUSION_4
+	help
+	  This enables the support for the Fusion 4 multi-touch controller available in the
+	  fusion Touch Displays, connected to the JumpStart Kit board.
+
+config CCIMX5X_FUSION_7_10_MULTITOUCH
+	bool "Enable support for the Fusion 7/10 multi-touchscreen controller on the JSK board"
+	depends on (I2C_MXC || I2C_IMX) && (JSCCIMX53_V2 || JSCCIMX51_V2)
+	select TOUCHSCREEN_FUSION_7_10
+	help
+	  This enables the support for the Fusion 7/10 multi-touch controller available in the
+	  fusion Touch Displays, connected to the JumpStart Kit board.
+
+endmenu
+endif

@@ -1,0 +1,36 @@
+# arch/arm/mach-ns9xxx/displays/Kconfig
+#
+# Copyright 2009 Digi International Inc
+#
+
+if (CC9P9360JS_FB || CCX9C_FB)
+
+comment "Display selection"
+
+config NS9XXX_FB_VGA
+	bool "CRT VGA video support"
+	depends on ! (CC9P9360JS_SERIAL_PORTA_FULL || CCX9C_SERIAL_PORTA_FULL || CCW9C_SERIAL_PORTA_FULL)
+	def_bool y
+	help
+	  This enables the video support for the VGA intrface.
+
+config NS9XXX_FB_LQ057Q3DC12I
+	bool "LQ057Q3DC12I TFT LCD support"
+	depends on ! (CC9P9360JS_SERIAL_PORTA_FULL || CCX9C_SERIAL_PORTA_FULL || CCW9C_SERIAL_PORTA_FULL)
+	help
+	  This enables the support for the LQ057Q3DC12I TFT display.
+
+config NS9XXX_FB_LQ064V3DG01
+	bool "LQ064V3DG01 TFT LCD support"
+	depends on ! (CC9P9360JS_SERIAL_PORTA_FULL || CCX9C_SERIAL_PORTA_FULL || CCW9C_SERIAL_PORTA_FULL)
+	help
+	  This enables the support for the LQ064V3DG01 TFT display.
+
+config NS9XXX_FB_CUSTOM
+	bool "Custom display support"
+	depends on ! (CC9P9360JS_SERIAL_PORTA_FULL || CCX9C_SERIAL_PORTA_FULL || CCW9C_SERIAL_PORTA_FULL)
+	help
+	  This enables the support for a customer specific display.
+	  displays/CUSTOM.h has to be modified when selecting this.
+
+endif

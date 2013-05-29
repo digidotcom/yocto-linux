@@ -1,0 +1,449 @@
+/*
+ * Copyright(c) 2009 Dialog Semiconductor Ltd.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * da9052-i2c.c: I2C SSC (Synchronous Serial Communication) driver for DA9052
+ */
+
+#include <linux/device.h>
+#include <linux/mfd/core.h>
+#include <linux/i2c.h>
+#include <linux/mfd/da9052/da9052.h>
+#include <linux/mfd/da9052/reg.h>
+
+static struct da9052 *da9052_i2c;
+
+#define I2C_CONNECTED 0
+
+static int da9052_i2c_is_connected(void)
+{
+	struct da9052_ssc_msg msg;
+	int retries = 10, ret = -1;
+
+	msg.addr = DA9052_INTERFACE_REG;
+	do {
+		/* Test i2c connectivity by reading the GPIO_0-1 register */
+		if (0 != da9052_i2c_read(da9052_i2c, &msg)) {
+			printk(KERN_INFO"da9052_i2c_is_connected - i2c read failed.....\n");
+		} else {
+			printk(KERN_INFO"da9052_i2c_is_connected - i2c read success....\n");
+			ret = 0;
+		}
+	} while (ret != 0 && retries--);
+
+	return ret;
+}
+
+static int __devinit da9052_i2c_probe(struct i2c_client *client,
+	const struct i2c_device_id *id)
+{
+	struct i2c_adapter *adapter;
+ 	// printk("\n\tEntered da9052_i2c_is_probe.............\n");
+
+        da9052_i2c = kzalloc(sizeof(struct da9052), GFP_KERNEL);
+
+        if (!da9052_i2c)
+                return -ENOMEM;
+
+	/* Get the bus driver handler */
+	adapter = to_i2c_adapter(client->dev.parent);
+
+	/* Check i2c bus driver supports byte data transfer */
+	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA)) {
+		dev_info(&client->dev,\
+		"Error in %s:i2c_check_functionality\n", __func__);
+		return -ENODEV;;
+	}
+
+	/* Store handle to i2c client */
+	da9052_i2c->i2c_client = client;
+	da9052_i2c->irq = client->irq;
+
+	da9052_i2c->dev = &client->dev;
+
+	/* Initialize i2c data structure here*/
+	da9052_i2c->adapter = adapter;
+
+	/* host i2c driver looks only first 7 bits for the slave address */
+	da9052_i2c->slave_addr = client->addr;
+
+	/* Store the i2c client data */
+	i2c_set_clientdata(client, da9052_i2c);
+
+	 /* Validate I2C connectivity */
+        if ( I2C_CONNECTED  == da9052_i2c_is_connected()) {
+                /* I2C is connected */
+                da9052_i2c->connecting_device = I2C;
+                if( 0!= da9052_ssc_init(da9052_i2c) )
+                        return -ENODEV;
+        }
+        else {
+                return -ENODEV;
+        }
+
+        //printk("Exiting da9052_i2c_probe.....\n");
+
+	return 0;
+}
+
+static int da9052_i2c_remove(struct i2c_client *client)
+{
+
+	struct da9052 *da9052 = i2c_get_clientdata(client);
+
+	mfd_remove_devices(da9052->dev);
+	kfree(da9052);
+	return 0;
+}
+
+#define I2C_DUMMY_REG	0xFF
+const unsigned char i2c_flush_data[] = {I2C_DUMMY_REG, 0xFF};
+
+/* DLG TODO: Add read only registers here (they are not affected with write) */
+static inline int da9052_is_i2c_reg_safe(unsigned char reg)
+{
+	const char safe_table[256] = {
+		[DA9052_STATUSA_REG] = 1,
+		[DA9052_STATUSB_REG] = 1,
+		[DA9052_STATUSC_REG] = 1,
+		[DA9052_STATUSD_REG] = 1,
+		[DA9052_EVENTA_REG] = 1,
+		[DA9052_EVENTB_REG] = 1,
+		[DA9052_EVENTC_REG] = 1,
+		[DA9052_EVENTD_REG] = 1,
+		[DA9052_ADCRESL_REG] = 1,
+		[DA9052_ADCRESH_REG] = 1,
+		[DA9052_VDDRES_REG] = 1,
+		[DA9052_ICHGAV_REG] = 1,
+		[DA9052_TBATRES_REG] = 1,
+		[DA9052_ADCIN4RES_REG] = 1,
+		[DA9052_ADCIN5RES_REG] = 1,
+		[DA9052_ADCIN6RES_REG] = 1,
+		[DA9052_TJUNCRES_REG] = 1,
+		[DA9052_TSIXMSB_REG] = 1,
+		[DA9052_TSIYMSB_REG] = 1,
+		[DA9052_TSILSB_REG] = 1,
+		[DA9052_TSIZMSB_REG] = 1,
+		[I2C_DUMMY_REG] = 1,	/* Dummy reg must be a save reg */
+	};
+
+	return safe_table[reg];
+}
+
+int da9052_i2c_write(struct da9052 *da9052, struct da9052_ssc_msg *msg)
+{
+	struct i2c_msg i2cmsg;
+	unsigned char buf[2] = {0};
+	int ret = 0;
+
+	/* Copy the ssc msg to local character buffer */
+	buf[0] = msg->addr;
+	buf[1] = msg->data;
+
+	/*Construct a i2c msg for a da9052 driver ssc message request */
+	i2cmsg.addr  = da9052->slave_addr;
+	i2cmsg.len   = 2;
+	i2cmsg.buf   = buf;
+
+	/* To write the data on I2C set flag to zero */
+	i2cmsg.flags = 0;
+
+	/* Start the i2c transfer by calling host i2c driver function */
+	ret = i2c_transfer(da9052->adapter, &i2cmsg, 1);
+
+	if (ret < 0) {
+		dev_info(&da9052->i2c_client->dev,\
+		"_%s:master_xfer Failed!!\n", __func__);
+		return ret;
+	}
+
+	if( da9052->chip_version <= DA9053_VERSION_CC ) {
+		/* Test, whether register to be accessed needs to be flushed */
+		if (!da9052_is_i2c_reg_safe(msg->addr)) {
+			i2cmsg.addr = da9052->slave_addr;
+			i2cmsg.len = 2;
+			i2cmsg.flags = 0;		/* Write operation */
+			/* i2c_flush_data is only to read from */
+			i2cmsg.buf = (unsigned char *)i2c_flush_data;
+
+			/* Additional flush write */
+			ret = i2c_transfer(da9052->adapter, &i2cmsg, 1);
+			if (ret < 0) {
+				dev_info(&da9052->i2c_client->dev,\
+				"2 - %s:master_xfer Failed!!\n", __func__);
+				return ret;
+			}
+		}
+	}
+	return 0;
+}
+
+int da9052_i2c_read(struct da9052 *da9052, struct da9052_ssc_msg *msg)
+{
+
+	/*Get the da9052_i2c client details*/
+	unsigned char buf[2] = {0, 0};
+	struct i2c_msg i2cmsg[3];
+	int ret = 0;
+
+	/* Copy SSC Msg to local character buffer */
+	buf[0] = msg->addr;
+
+	/*Construct a i2c msg for a da9052 driver ssc message request */
+	i2cmsg[0].addr  = da9052->slave_addr ;
+	i2cmsg[0].len   = 1;
+	i2cmsg[0].buf   = &buf[0];
+
+	/*To write the data on I2C set flag to zero */
+	i2cmsg[0].flags = 0;
+
+	/* Read the data from da9052*/
+	/*Construct a i2c msg for a da9052 driver ssc message request */
+	i2cmsg[1].addr  = da9052->slave_addr ;
+	i2cmsg[1].len   = 1;
+	i2cmsg[1].buf   = &buf[1];
+
+	/*To read the data on I2C set flag to I2C_M_RD */
+	i2cmsg[1].flags = I2C_M_RD;
+
+	/* Standard read transfer */
+	ret = i2c_transfer(da9052->adapter, i2cmsg, 2);
+
+	if (ret < 0) {
+		dev_info(&da9052->i2c_client->dev,\
+		"2 - %s:master_xfer Failed!!\n", __func__);
+	}
+
+	if( da9052->chip_version <= DA9053_VERSION_CC ) {
+		/* Test, whether register to be accessed needs to be flushed */
+		if (!da9052_is_i2c_reg_safe(msg->addr)) {
+			i2cmsg[2].addr = da9052->slave_addr;
+			i2cmsg[2].len = 2;
+			i2cmsg[2].flags = 0;		/* Write operation */
+			/* i2c_flush_data is only to read from */
+			i2cmsg[2].buf = (unsigned char *)i2c_flush_data;
+
+			/* Read transfer with additional flush write */
+			ret = i2c_transfer(da9052->adapter, &i2cmsg[2], 1);
+		}
+	}
+
+	if (ret < 0) {
+		dev_info(&da9052->i2c_client->dev,\
+		"2 - %s:master_xfer Failed!!\n", __func__);
+		return ret;
+	}
+
+	msg->data = *i2cmsg[1].buf;
+
+	return 0;
+}
+
+int da9052_i2c_write_many(struct da9052 *da9052,
+	struct da9052_ssc_msg *sscmsg, int msg_no)
+{
+
+	struct i2c_msg i2cmsg;
+	unsigned char data_buf[MAX_READ_WRITE_CNT+1];
+	struct da9052_ssc_msg ctrlb_msg;
+	struct da9052_ssc_msg *msg_queue = sscmsg;
+	int ret = 0;
+	/* Flag to check if requested registers are contiguous */
+	unsigned char cont_data = 1;
+	unsigned char cnt = 0;
+
+	/* Check if requested registers are contiguous */
+	for (cnt = 1; cnt < msg_no; cnt++) {
+		if ((msg_queue[cnt].addr - msg_queue[cnt-1].addr) != 1) {
+			/* Difference is not 1, i.e. non-contiguous registers */
+			cont_data = 0;
+			break;
+		}
+	}
+
+	if (cont_data == 0) {
+		/* Requested registers are non-contiguous */
+		for (cnt = 0; cnt < msg_no; cnt++) {
+			ret = da9052->write(da9052, &msg_queue[cnt]);
+			if (ret != 0)
+				return ret;
+		}
+		return 0;
+	}
+	/*
+	*  Requested registers are contiguous
+	* or PAGE WRITE sequence of I2C transactions is as below
+	* (slave_addr + reg_addr + data_1 + data_2 + ...)
+	* First read current WRITE MODE via CONTROL_B register of DA9052
+	*/
+	ctrlb_msg.addr = DA9052_CONTROLB_REG;
+	ctrlb_msg.data = 0x0;
+	ret = da9052->read(da9052, &ctrlb_msg);
+
+	if (ret != 0)
+		return ret;
+
+	/* Check if PAGE WRITE mode is set */
+	if (ctrlb_msg.data & DA9052_CONTROLB_WRITEMODE) {
+		/* REPEAT WRITE mode is configured */
+		/* Now set DA9052 into PAGE WRITE mode */
+		ctrlb_msg.data &= ~DA9052_CONTROLB_WRITEMODE;
+		ret = da9052->write(da9052, &ctrlb_msg);
+
+		if (ret != 0)
+			return ret;
+	}
+
+	 /* Put first register address */
+	data_buf[0] = msg_queue[0].addr;
+
+	for (cnt = 0; cnt < msg_no; cnt++)
+		data_buf[cnt+1] = msg_queue[cnt].data;
+
+	/* Construct a i2c msg for PAGE WRITE */
+	i2cmsg.addr  = da9052->slave_addr ;
+	/* First register address + all data*/
+	i2cmsg.len   = (msg_no + 1);
+	i2cmsg.buf   = data_buf;
+
+	/*To write the data on I2C set flag to zero */
+	i2cmsg.flags = 0;
+
+	/* Start the i2c transfer by calling host i2c driver function */
+	ret = i2c_transfer(da9052->adapter, &i2cmsg, 1);
+	if (ret < 0) {
+		dev_info(&da9052->i2c_client->dev,\
+		"1 - i2c_transfer function falied in [%s]!!!\n", __func__);
+		return ret;
+	}
+
+	if( da9052->chip_version <= DA9053_VERSION_CC ) {
+		/* Test, whether last register to be accessed needs to be flushed */
+		if (!da9052_is_i2c_reg_safe(sscmsg[msg_no-1].addr)) {
+			i2cmsg.addr  = da9052->slave_addr;
+			i2cmsg.len   = 2;
+			i2cmsg.flags = 0;	 /* Write operation */
+			/* i2c_flush_data is only to read from */
+			i2cmsg.buf   = (unsigned char *)i2c_flush_data;
+
+			ret = i2c_transfer(da9052->adapter, &i2cmsg, 1);
+			if (ret < 0) {
+				dev_info(&da9052->i2c_client->dev,
+					 "%s: i2c_transfer failed!!!\n", __func__);
+				return ret;
+			}
+		}
+	}
+
+	return 0;
+}
+
+int da9052_i2c_read_many(struct da9052 *da9052,
+	struct da9052_ssc_msg *sscmsg, int msg_no)
+{
+	struct i2c_msg i2cmsg[2];
+	unsigned char data_buf[MAX_READ_WRITE_CNT];
+	int ret = 0;
+	int expected_addr = 0xFF;
+	int cnt;
+
+	if( msg_no < 0 || msg_no >= MAX_READ_WRITE_CNT ){
+		pr_err("da9052_i2c_read_many: Out of order %d\n",msg_no);
+		return -EINVAL;
+	}
+
+	/* Construct a i2c msgs for a da9052 driver ssc message request */
+	cnt = 0;
+	do {
+		/* Build messages for read transaction */
+		i2cmsg[0].addr  = da9052->slave_addr;
+		i2cmsg[0].buf   = &sscmsg[cnt].addr;
+		i2cmsg[0].flags = 0;
+		i2cmsg[0].len   = 1;
+		i2cmsg[1].addr  = da9052->slave_addr;
+		i2cmsg[1].buf   = &data_buf[cnt];
+		i2cmsg[1].flags = I2C_M_RD;
+		/* Grab consecutive register reads into one message */
+		for (i2cmsg[1].len = 0, expected_addr = sscmsg[cnt].addr;
+			(cnt < msg_no) && (sscmsg[cnt].addr == expected_addr);
+			cnt++, expected_addr++)
+		{
+			i2cmsg[1].len++;
+		}
+
+		/* Perform read transaction */
+		ret = i2c_transfer(da9052->adapter, i2cmsg, 2);
+		if (ret < 0) {
+			dev_info(&da9052->i2c_client->dev,
+				 "%s: i2c_transfer failed!!!\n", __func__);
+			return ret;
+		}
+	} while (cnt < msg_no);
+
+	if( da9052->chip_version <= DA9053_VERSION_CC ) {
+		/* Test, whether last register to be accessed needs to be flushed */
+		if (!da9052_is_i2c_reg_safe(sscmsg[msg_no-1].addr)) {
+			i2cmsg[0].addr  = da9052->slave_addr;
+			i2cmsg[0].len   = 2;
+			i2cmsg[0].flags = 0;	 /* Write operation */
+			/* i2c_flush_data is only to read from */
+			i2cmsg[0].buf   = (unsigned char *)i2c_flush_data;
+
+			ret = i2c_transfer(da9052->adapter, i2cmsg, 1);
+			if (ret < 0) {
+				dev_info(&da9052->i2c_client->dev,
+					 "%s: i2c_transfer failed!!!\n", __func__);
+				return ret;
+			}
+		}
+	}
+
+	/* Gather READ data */
+	for (cnt = 0; cnt < msg_no; cnt++)
+		sscmsg[cnt].data = data_buf[cnt];
+
+	return 0;
+}
+
+static struct i2c_device_id da9052_ssc_id[] = {
+	{ DA9052_SSC_I2C_DEVICE_NAME, 0},
+	{}
+};
+
+static struct i2c_driver da9052_i2c_driver =  {
+	.driver = {
+		.name	= DA9052_SSC_I2C_DEVICE_NAME,
+		.owner	= THIS_MODULE,
+	},
+	.probe	= da9052_i2c_probe,
+	.remove	= da9052_i2c_remove,
+	.id_table	= da9052_ssc_id,
+};
+
+static int __init da9052_i2c_init(void)
+{
+        int ret = 0;
+       // printk("\n\nEntered da9052_i2c_init................\n\n");
+        ret = i2c_add_driver(&da9052_i2c_driver);
+        if (ret != 0) {
+                printk(KERN_ERR "Unable to register %s\n", DA9052_SSC_I2C_DEVICE_NAME);
+                return ret;
+        }
+        return 0;
+}
+subsys_initcall(da9052_i2c_init);
+
+static void  __exit da9052_i2c_exit(void)
+{
+        i2c_del_driver(&da9052_i2c_driver);
+}
+module_exit(da9052_i2c_exit);
+
+MODULE_AUTHOR("Dialog Semiconductor Ltd <dchen@diasemi.com>");
+MODULE_DESCRIPTION("I2C driver for Dialog DA9052 PMIC");
+MODULE_LICENSE("GPL v2");
+MODULE_ALIAS("platform:" DA9052_SSC_I2C_DEVICE_NAME);
