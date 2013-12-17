@@ -75,6 +75,10 @@ struct mc13892 {
 
 	/* Client devices */
 	struct mc13892_pmic pmic;
+
+	/* Input device */
+	struct input_dev *input;
+	unsigned int input_value;
 };
 
 int mc13892_register_regulator(struct mc13892 *mc13892, int reg,

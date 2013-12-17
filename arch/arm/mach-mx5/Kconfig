@@ -254,15 +254,6 @@ config MXC_ENABLE_WARM_RESET
 
            If not sure, say N.
 
-config CCIMX5X_PM_POWER_BUTTON
-        bool "Enable power button for suspend/resume to RAM"
-        depends on MODULE_CCIMX51 || (MODULE_CCIMX53 && (INPUT_DA9052_ONKEY || INPUT_DA9052_ONKEY_MODULE))
-        default y
-        help
-           This option will enable the usage of the power button to suspend
-           and wake up the device. With this set, the target will always have
-           the power button enabled as a wake up source.
-
 endif
 
 menu "Serial Port Options"

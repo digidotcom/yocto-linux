@@ -549,8 +549,7 @@ int da9052_ssc_init(struct da9052 *da9052)
 	if (request_irq(da9052->irq, da9052_eh_isr, IRQ_TYPE_LEVEL_LOW,
 		DA9052_EH_DEVICE_NAME, da9052))
 		return -EIO;
-#if !defined(CONFIG_MODULE_CCIMX53) || defined(CONFIG_CCIMX5X_PM_POWER_BUTTON)\
-	|| defined(CONFIG_RTC_DRV_DA9052)
+#if defined(CONFIG_RTC_DRV_DA9052)
 	enable_irq_wake(da9052->irq);
 #endif
 	da9052_data = da9052;

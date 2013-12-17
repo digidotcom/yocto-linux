@@ -21,6 +21,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/mfd/mc13892/core.h>
 #include <linux/delay.h>
+#include <linux/input.h>
 #include <asm/mach-types.h>
 #include "iomux.h"
 #include <mach/irqs.h>
@@ -86,6 +87,8 @@
 
 #define	SWMODE_MASK	0xF
 #define SWMODE_AUTO	0x8
+
+#define PWRON1_SENSE_BIT3 0x8
 
 /* CPU */
 static struct regulator_consumer_supply sw1_consumers[] = {
@@ -289,61 +292,28 @@ static struct regulator_init_data vgen3_init = {
 	}
 };
 
-#ifdef CONFIG_CCIMX5X_PM_POWER_BUTTON
-enum power_on_state {
-	PWRON_FROM_RESUME,
-	PWRON_FALLING_EDGE,
-	PWRON_FROM_SUSPEND
-};
-
-static int pwron_state = PWRON_FROM_RESUME;
-
-static void power_on_evt_handler(void)
+static void power_on_evt_handler(void * param)
 {
-	int pwron1_sense = 0;
-	int pwron1_interrupt = 0;
+	unsigned int value;
+	struct mc13892 * mc13892 = param;
 
 	if( system_state != SYSTEM_RUNNING)
 		return;
 
-	switch (pwron_state){
-			case PWRON_FROM_RESUME:
-				// Are we waking up from a non power button suspend
-				// and this is the falling edge already?
-				pmic_read_reg(REG_INT_SENSE1, &pwron1_sense, 0xffffff);
-				if(pwron1_sense & 0x8 /* Reg 5, Bit 3, PWRON1S */)
-					pwron_state = PWRON_FROM_RESUME;
-				else
-					// Skipping falling edge
-					pwron_state = PWRON_FALLING_EDGE;
-				break;
-			case PWRON_FALLING_EDGE:
-				// Suspend on rising edge
-				pm_suspend(PM_SUSPEND_MEM);
-				// Did we wake by a power button press?
-				pmic_read_reg(REG_INT_STATUS1, &pwron1_interrupt, 0xffffff);
-				if(pwron1_interrupt & 0x8 /* Reg 3, Bit 3, PWRON1I */)
-					pwron_state = PWRON_FROM_SUSPEND;
-				else
-					// Waken by other source
-					pwron_state = PWRON_FROM_RESUME;
-				break;
-			case PWRON_FROM_SUSPEND:
-				// Ignoring raising edge
-				pwron_state = PWRON_FROM_RESUME;
-				break;
-			default:
-				pr_err("power_on_evt_handler: Unitialized state\n");
+	pmic_read_reg(REG_INT_SENSE1, &value, PWRON1_SENSE_BIT3);
+	value = value? 0:1;
+	if( value != mc13892->input_value){
+		mc13892->input_value = value;
+		input_report_key(mc13892->input, KEY_POWER,
+			mc13892->input_value );
+		input_sync(mc13892->input);
 	}
 }
-#endif
 
 static int mc13892_regulator_init(struct mc13892 *mc13892)
 {
 	unsigned int value, register_mask;
-#ifdef CONFIG_CCIMX5X_PM_POWER_BUTTON
 	pmic_event_callback_t power_key_event;
-#endif
 
 	printk("Initializing regulators for CCIMX51.\n");
 	if (mxc_cpu_is_rev(CHIP_REV_2_0) < 0)
@@ -353,12 +323,26 @@ static int mc13892_regulator_init(struct mc13892 *mc13892)
 		sw1_init.constraints.state_mem.uV = 1000000;
 	}
 
-#ifdef CONFIG_CCIMX5X_PM_POWER_BUTTON
+        mc13892->input = input_allocate_device();
+        if (!mc13892->input) {
+                dev_err(mc13892->dev, "failed to allocate input device\n");
+                return -ENOMEM;
+        }
+
+	mc13892->input->evbit[0] = BIT_MASK(EV_KEY);
+	mc13892->input->keybit[BIT_WORD(KEY_POWER)] = BIT_MASK(KEY_POWER);
+	mc13892->input->name = "mc13892-pwron";
+	mc13892->input->phys = "mc13892-pwron/input0";
+	mc13892->input->dev.parent = mc13892->dev;
+
+	if (input_register_device(mc13892->input)) {
+		dev_err(mc13892->dev, "Unable to register input device\n");
+	}
+
 	/* subscribe PWRON1 event to enable POWER key */
-	power_key_event.param = NULL;
+	power_key_event.param = mc13892;
 	power_key_event.func = (void *)power_on_evt_handler;
 	pmic_event_subscribe(EVENT_PWRONI, power_key_event);
-#endif
 
 	/* enable standby controll for all regulators */
 	pmic_read_reg(REG_MODE_0, &value, 0xffffff);

@@ -7,10 +7,6 @@
 #include <linux/mfd/da9052/da9052.h>
 #include <linux/mfd/da9052/reg.h>
 
-#ifdef CONFIG_CCIMX5X_PM_POWER_BUTTON
-#include <linux/suspend.h>
-#endif
-
 #define DRIVER_NAME "da9052-onkey"
 
 struct da9052_onkey_data {
@@ -18,63 +14,8 @@ struct da9052_onkey_data {
 	struct da9052_eh_nb eh_data;
 	struct input_dev *input;
 	struct delayed_work polling_work;
+	unsigned int value;
 };
-
-#ifdef CONFIG_CCIMX5X_PM_POWER_BUTTON
-enum power_on_state {
-	PWRON_FROM_RESUME,
-	PWRON_FALLING_EDGE,
-	PWRON_FROM_SUSPEND
-};
-
-static int pwron_state = PWRON_FROM_RESUME;
-
-static void da9052_power_button( struct da9052 *da9052 , int value )
-{
-	struct da9052_ssc_msg ssc_msg;
-	unsigned int ret;
-
-	if( system_state != SYSTEM_RUNNING)
-		return;
-
-	switch (pwron_state){
-			case PWRON_FROM_RESUME:
-				// Are we waking up from a non power button suspend
-				// and this is the falling edge already?
-				if( !value )
-					pwron_state = PWRON_FROM_RESUME;
-				else
-					// Skipping falling edge
-					pwron_state = PWRON_FALLING_EDGE;
-				break;
-			case PWRON_FALLING_EDGE:
-				// Suspend on rising edge
-				pm_suspend(PM_SUSPEND_MEM);
-				// Did we wake by a power button press?
-				da9052_lock(da9052);
-				ssc_msg.addr = DA9052_EVENTB_REG;
-				ret = da9052->read(da9052, &ssc_msg);
-				if (ret) {
-					da9052_unlock(da9052);
-					pwron_state = PWRON_FROM_RESUME;
-					return;
-				}
-				da9052_unlock(da9052);
-				if( ssc_msg.data | DA9052_EVENTB_ENONKEY )
-					pwron_state = PWRON_FROM_SUSPEND;
-				else
-					// Waken by other source
-					pwron_state = PWRON_FROM_RESUME;
-				break;
-			case PWRON_FROM_SUSPEND:
-				// Ignoring raising edge
-				pwron_state = PWRON_FROM_RESUME;
-				break;
-			default:
-				pr_err("power_on_evt_handler: Unitialized state\n");
-	}
-}
-#endif
 
 static void da9052_onkey_work_func(struct work_struct *work)
 {
@@ -82,7 +23,7 @@ static void da9052_onkey_work_func(struct work_struct *work)
 		container_of(work, struct da9052_onkey_data, polling_work.work);
 	struct da9052_ssc_msg msg;
 	unsigned int ret;
-	int value;
+	int old_value = da9052_onkey->value;
 
 	da9052_lock(da9052_onkey->da9052);
 	msg.addr = DA9052_STATUSA_REG;
@@ -92,17 +33,15 @@ static void da9052_onkey_work_func(struct work_struct *work)
 		return;
 	}
 	da9052_unlock(da9052_onkey->da9052);
-	value = (msg.data & DA9052_STATUSA_NONKEY) ? 0 : 1;
+	da9052_onkey->value = (msg.data & DA9052_STATUSA_NONKEY) ? 0 : 1;
 
-	input_report_key(da9052_onkey->input, KEY_POWER, value);
-	input_sync(da9052_onkey->input);
-
-#ifdef CONFIG_CCIMX5X_PM_POWER_BUTTON
-	da9052_power_button( da9052_onkey->da9052 , value );
-#endif
-
+	if( da9052_onkey->value != old_value ) {
+		input_report_key(da9052_onkey->input, KEY_POWER,
+			da9052_onkey->value );
+		input_sync(da9052_onkey->input);
+	}
 	/* if key down, polling for up */
-	if (value)
+	if (da9052_onkey->value)
 		schedule_delayed_work(&da9052_onkey->polling_work, HZ/10);
 }
 
