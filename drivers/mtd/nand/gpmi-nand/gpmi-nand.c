@@ -238,6 +238,7 @@ static bool set_geometry_by_ecc_info(struct gpmi_nand_data *this)
 static int legacy_set_geometry(struct gpmi_nand_data *this)
 {
 	struct bch_geometry *geo = &this->bch_geometry;
+	struct nand_oobfree *of = gpmi_hw_ecclayout.oobfree;
 	struct mtd_info *mtd = &this->mtd;
 	unsigned int metadata_size;
 	unsigned int status_size;
@@ -344,6 +345,10 @@ static int legacy_set_geometry(struct gpmi_nand_data *this)
 
 	geo->block_mark_byte_offset = block_mark_bit_offset / 8;
 	geo->block_mark_bit_offset  = block_mark_bit_offset % 8;
+
+	of->offset = 0;
+	of->length = mtd->oobsize;
+
 	return 0;
 }
 
@@ -1670,6 +1675,29 @@ static int gpmi_nfc_init(struct gpmi_nand_data *this)
 	ret = nand_scan_tail(mtd);
 	if (ret)
 		goto err_out;
+
+	/*
+	 * Tell MTD users that the out-of-band area can't be written.
+	 *
+	 * This flag is not part of the standard kernel source tree. It comes
+	 * from a patch that touches both MTD and JFFS2.
+	 *
+	 * The problem is that, without this patch, JFFS2 believes it can write
+	 * the data area and the out-of-band area separately. This is wrong for
+	 * two reasons:
+	 *
+	 *     1)  Our NFC distributes out-of-band bytes throughout the page,
+	 *         intermingled with the data, and covered by the same ECC.
+	 *         Thus, it's not possible to write the out-of-band bytes and
+	 *         data bytes separately.
+	 *
+	 *     2)  Large page (MLC) Flash chips don't support partial page
+	 *         writes. You must write the entire page at a time. Thus, even
+	 *         if our NFC didn't force you to write out-of-band and data
+	 *         bytes together, it would *still* be a bad idea to do
+	 *         otherwise.
+	 */
+	mtd->flags &= ~MTD_OOB_WRITEABLE;
 
 	ret = nand_boot_init(this);
 	if (ret)
