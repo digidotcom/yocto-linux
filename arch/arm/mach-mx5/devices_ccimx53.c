@@ -1398,6 +1398,7 @@ static struct flexcan_platform_data flexcan0_data = {
 	.srx_dis = 1,
 	.smp = 1,
 	.boff_rec = 1,
+	.berr_reporting = 1,
 	.ext_msg = 1,
 	.std_msg = 1,
 };
@@ -1415,6 +1416,7 @@ static struct flexcan_platform_data flexcan1_data = {
 	.bcc = 1,
 	.srx_dis = 1,
 	.boff_rec = 1,
+	.berr_reporting = 1,
 	.ext_msg = 1,
 	.std_msg = 1,
 };

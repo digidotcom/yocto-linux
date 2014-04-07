@@ -77,7 +77,7 @@ uint32_t g_ddi_bc_u32StateTimer;
 /* Always attempt to charge on first 5V connection */
 bool bRestartChargeCycle = true;
 
-#ifdef CONFIG_POWER_SUPPLY_DEBUG
+#ifdef CONFIG_MXS_POWER_VOLTAGE_CHECK
 static uint16_t u16ExternalBatteryPowerVoltageCheck;
 #endif
 
@@ -402,7 +402,7 @@ static ddi_bc_Status_t ddi_bc_WaitingToCharge(void)
 	/* -------------------------------------------------------------------------- */
 
 	if (!ddi_bc_hwPowerSupplyIsPresent()) {
-#ifdef CONFIG_POWER_SUPPLY_DEBUG
+#ifdef CONFIG_MXS_POWER_VOLTAGE_CHECK
 		u16ExternalBatteryPowerVoltageCheck = 0;
 #endif
 		return DDI_BC_STATUS_SUCCESS;
@@ -414,7 +414,7 @@ static ddi_bc_Status_t ddi_bc_WaitingToCharge(void)
 
 	u16BatteryVoltage = ddi_bc_hwGetBatteryVoltage();
 
-#ifdef CONFIG_POWER_SUPPLY_DEBUG
+#ifdef CONFIG_MXS_POWER_VOLTAGE_CHECK
 	if (u16ExternalBatteryPowerVoltageCheck) {
 		if ((u16ExternalBatteryPowerVoltageCheck - u16BatteryVoltage) >
 		    300) {
@@ -769,7 +769,7 @@ static ddi_bc_Status_t ddi_bc_Charging(void)
 
 				iStatusCount = 0;
 
-#ifdef CONFIG_POWER_SUPPLY_DEBUG
+#ifdef CONFIG_MXS_POWER_VOLTAGE_CHECK
 				u16ExternalBatteryPowerVoltageCheck =
 				    ddi_bc_hwGetBatteryVoltage();
 #endif

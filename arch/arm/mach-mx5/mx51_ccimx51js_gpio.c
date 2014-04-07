@@ -1256,6 +1256,19 @@ void __init ccimx51_io_init(void)
 
 }
 
+#if defined (CONFIG_CCIMX5X_FUSION_4_MULTITOUCH) || defined(CONFIG_CCIMX5X_FUSION_7_10_MULTITOUCH)
+void ccimx51_fusion_gpio_init(void) {
+	/* Interrupt line */
+	mxc_request_iomux(SECOND_TS_IRQ_PIN, IOMUX_CONFIG_GPIO);
+	mxc_iomux_set_pad(SECOND_TS_IRQ_PIN, PAD_CTL_SRE_FAST | PAD_CTL_HYS_ENABLE);
+	mxc_iomux_set_input(MUX_IN_GPIO3_IPP_IND_G_IN_3_SELECT_INPUT, INPUT_CTL_PATH1);
+	gpio_request(IOMUX_TO_GPIO(SECOND_TS_IRQ_PIN), "fusion_irq");
+	gpio_direction_input(IOMUX_TO_GPIO(SECOND_TS_IRQ_PIN));
+}
+#else
+void ccimx51_fusion_gpio_init(void) {}
+#endif
+
 #ifdef CONFIG_CCIMX5X_SECOND_TOUCH
 void ccimx51_2nd_touch_gpio_init(void)
 {

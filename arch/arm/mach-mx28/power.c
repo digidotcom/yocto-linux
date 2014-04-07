@@ -313,6 +313,7 @@ static struct regulator_init_data vddio_init = {
 	}
 };
 
+#if !defined(CONFIG_MACH_CCARDIMX28JS)
 static int vbus5v_enable(struct mxs_regulator *sreg)
 {
 	gpio_set_value(USB_POWER_ENABLE, 1);
@@ -344,7 +345,7 @@ static struct regulator_init_data vbus5v_init = {
 		.valid_ops_mask		= REGULATOR_CHANGE_STATUS,
 	}
 };
-
+#endif /* !CONFIG_MACH_CCARDIMX28JS */
 
 /* now the current regulators */
 /* Restriction: .... no set_current call on root regulator */
@@ -546,9 +547,11 @@ static struct mxs_regulator overall_cur_reg = {
 		.rdata = &overall_cur_data,
 };
 
+#if !defined(CONFIG_MACH_CCARDIMX28JS)
 static struct mxs_regulator vbus5v_reg = {
 		.rdata = &vbus5v_data,
 };
+#endif
 
 static int __init regulators_init(void)
 {
@@ -565,7 +568,10 @@ static int __init regulators_init(void)
 	mxs_register_regulator(&overall_cur_reg,
 		MXS_OVERALL_CUR, &overall_cur_init);
 
+#if !defined(CONFIG_MACH_CCARDIMX28JS)
+	/* ConnectCard platform does not use the VBUS5V regulator */
 	mxs_register_regulator(&vbus5v_reg, MX28_VBUS5v, &vbus5v_init);
+#endif
 
 	for (i = 0; i < ARRAY_SIZE(device_names); i++) {
 		retval = mxs_platform_add_regulator(device_names[i], 1);

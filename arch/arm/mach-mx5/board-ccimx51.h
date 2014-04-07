@@ -64,6 +64,7 @@
 #endif
 
 void ccimx51_2nd_touch_gpio_init(void);
+void ccimx51_fusion_gpio_init(void);
 void ccimx51_init_2nd_touch(void);
 
 /* CPU models */

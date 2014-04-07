@@ -305,6 +305,8 @@ void mx28_pm_idle(void)
 
 static void mx28_pm_power_off(void)
 {
+	unsigned int timeout = 100;
+
 #if defined(CONFIG_MODULE_CCARDIMX28)
 	/*
 	 * Setting this bit causes the RTC to be powered from the
@@ -313,6 +315,18 @@ static void mx28_pm_power_off(void)
 	__raw_writel(BM_POWER_5VCTRL_ILIMIT_EQ_ZERO,
 	             REGS_POWER_BASE + HW_POWER_5VCTRL_SET);
 #endif
+	/* Clear the AUTO_RESTART flag */
+	__raw_writel(BM_RTC_PERSISTENT0_AUTO_RESTART,
+		     REGS_RTC_BASE + HW_RTC_PERSISTENT0_CLR);
+
+	/* Wait for it to take effect before we power down the
+	 * analog supplies
+	 */
+	while ((__raw_readl(REGS_RTC_BASE + HW_RTC_STAT) &
+			BM_RTC_STAT_NEW_REGS) && timeout--)
+		msleep(1);
+
+	/* Power down CPU */
 	__raw_writel(BF_POWER_RESET_UNLOCK(0x3e77) | BM_POWER_RESET_PWD,
 		REGS_POWER_BASE + HW_POWER_RESET);
 }

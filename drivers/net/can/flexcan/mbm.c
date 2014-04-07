@@ -63,7 +63,7 @@ static void flexcan_mb_bottom(struct net_device *dev, int index)
 
 		if (hwmb->mb_cs & (CAN_MB_TX_INACTIVE << MB_CS_CODE_OFFSET)) {
 			if (netif_queue_stopped(dev))
-				netif_start_queue(dev);
+				netif_wake_queue(dev);
 			return;
 		}
 	}
@@ -92,7 +92,7 @@ static void flexcan_mb_bottom(struct net_device *dev, int index)
 			hwmb->mb_cs &= ~MB_CS_CODE_MASK;
 			hwmb->mb_cs |= CAN_MB_TX_INACTIVE << MB_CS_CODE_OFFSET;
 			if (netif_queue_stopped(dev))
-				netif_start_queue(dev);
+				netif_wake_queue(dev);
 		}
 
 		tmp = __raw_readl(flexcan->io_base + CAN_HW_REG_TIMER);
@@ -114,7 +114,7 @@ static void flexcan_mb_bottom(struct net_device *dev, int index)
 			hwmb->mb_cs &= ~MB_CS_CODE_MASK;
 			hwmb->mb_cs |= CAN_MB_TX_INACTIVE << MB_CS_CODE_OFFSET;
 			if (netif_queue_stopped(dev))
-				netif_start_queue(dev);
+				netif_wake_queue(dev);
 		}
 		tmp = __raw_readl(flexcan->io_base + CAN_HW_REG_TIMER);
 		stats->rx_dropped++;

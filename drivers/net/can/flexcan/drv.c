@@ -133,6 +133,8 @@ static inline void flexcan_mcr_setup(struct flexcan_device *flexcan)
 
 	reg |= (flexcan->maxmb << __MCR_MAX_MB_OFFSET);
 	reg |= __MCR_DOZE | __MCR_MAX_IDAM_C;
+	/* Enable TWRN_INT and RWRN_INT */
+	reg |= __MCR_WRN_EN;
 	__raw_writel(reg, flexcan->io_base + CAN_HW_REG_MCR);
 }
 
@@ -177,8 +179,12 @@ static inline void flexcan_ctrl_setup(struct flexcan_device *flexcan)
 
 	reg &= ~__CTRL_LBUF;
 
-	reg |= __CTRL_TWRN_MSK | __CTRL_RWRN_MSK | __CTRL_BOFF_MSK |
-	    __CTRL_ERR_MSK;
+	reg |= __CTRL_TWRN_MSK | __CTRL_RWRN_MSK | __CTRL_BOFF_MSK;
+
+	if (flexcan->berr_reporting)
+		reg |= __CTRL_ERR_MSK;
+	else
+		reg &= ~__CTRL_ERR_MSK;
 
 	__raw_writel(reg, flexcan->io_base + CAN_HW_REG_CTRL);
 }
@@ -207,7 +213,7 @@ static int flexcan_hw_restart(struct net_device *dev)
 	flexcan_hw_start(flexcan);
 
 	if (netif_queue_stopped(dev))
-		netif_start_queue(dev);
+		netif_wake_queue(dev);
 
 	return 0;
 }
@@ -223,7 +229,7 @@ static void flexcan_hw_watch(unsigned long data)
 	reg = __raw_readl(flexcan->io_base + CAN_HW_REG_MCR);
 	if (reg & __MCR_MDIS) {
 		if (flexcan_hw_restart(dev))
-			mod_timer(&flexcan->timer, HZ / 20);
+			mod_timer(&flexcan->timer, jiffies + HZ / 20);
 		return;
 	}
 	ecr = __raw_readl(flexcan->io_base + CAN_HW_REG_ECR);
@@ -231,7 +237,7 @@ static void flexcan_hw_watch(unsigned long data)
 		if (((reg & __ESR_FLT_CONF_MASK) >> __ESR_FLT_CONF_OFF) > 1) {
 			reg |= __MCR_SOFT_RST;
 			__raw_writel(reg, flexcan->io_base + CAN_HW_REG_MCR);
-			mod_timer(&flexcan->timer, HZ / 20);
+			mod_timer(&flexcan->timer, jiffies + HZ / 20);
 			return;
 		}
 		netif_carrier_on(dev);
@@ -249,12 +255,12 @@ static void flexcan_hw_busoff(struct net_device *dev)
 	flexcan->timer.data = (unsigned long)dev;
 
 	if (flexcan->boff_rec) {
-		mod_timer(&flexcan->timer, HZ / 10);
+		mod_timer(&flexcan->timer, jiffies + HZ / 10);
 		return;
 	}
 	reg = __raw_readl(flexcan->io_base + CAN_HW_REG_MCR);
 	__raw_writel(reg | __MCR_SOFT_RST, flexcan->io_base + CAN_HW_REG_MCR);
-	mod_timer(&flexcan->timer, HZ / 20);
+	mod_timer(&flexcan->timer, jiffies + HZ / 20);
 }
 
 static int flexcan_hw_open(struct flexcan_device *flexcan)
@@ -435,6 +441,9 @@ static int flexcan_open(struct net_device *dev)
 	flexcan_mbm_init(flexcan);
 	netif_carrier_on(dev);
 	flexcan_hw_start(flexcan);
+
+	netif_start_queue(dev);
+
 	return 0;
       open_err:
 	free_irq(flexcan->irq, dev);
@@ -468,6 +477,8 @@ static int flexcan_stop(struct net_device *dev)
 
 	pdev = flexcan->dev;
 	plat_data = (pdev->dev).platform_data;
+
+	netif_stop_queue(dev);
 
 	flexcan_hw_stop(flexcan);
 

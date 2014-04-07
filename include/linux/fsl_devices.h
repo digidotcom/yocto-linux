@@ -537,6 +537,7 @@ struct flexcan_platform_data {
 	unsigned int boff_rec:1;
 	unsigned int tsyn:1;
 	unsigned int listen:1;
+	unsigned int berr_reporting:1;
 	unsigned int ext_msg:1;
 	unsigned int std_msg:1;
 };

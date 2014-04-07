@@ -232,34 +232,34 @@ static void check_and_handle_5v_connection(struct mxs_info *info)
 					_5v_connected_verified;
 				dev_dbg(info->dev,
 					"5v connection verified\n");
-			if (info->onboard_vbus5v) {
-				if (regulator_is_enabled(
-					info->onboard_vbus5v) > 0) {
-					info->onboard_vbus5v_online = 1;
-					pr_debug("When supply from \
-					onboard vbus 5v ,\
-					DO NOT switch to 4p2 \n");
-					break;
-			}
-		}
+				if (info->onboard_vbus5v) {
+					if (regulator_is_enabled(
+						info->onboard_vbus5v) > 0) {
+						info->onboard_vbus5v_online = 1;
+						pr_debug("When supply from \
+						onboard vbus 5v ,\
+						DO NOT switch to 4p2 \n");
+						break;
+					}
+				}
 #ifdef CONFIG_MXS_VBUS_CURRENT_DRAW
 	#ifdef CONFIG_USB_GADGET
-		/* if there is USB 2.0 current limitation requirement,
-		* waiting for USB enum done.
-		*/
-		if ((__raw_readl(REGS_POWER_BASE + HW_POWER_5VCTRL)
-			& BM_POWER_5VCTRL_CHARGE_4P2_ILIMIT) ==
-			(0x20 << BP_POWER_5VCTRL_CHARGE_4P2_ILIMIT)) {
-			dev_info(info->dev, "waiting USB enum done...\r\n");
-		}
-		while ((__raw_readl(REGS_POWER_BASE + HW_POWER_5VCTRL)
-			& BM_POWER_5VCTRL_CHARGE_4P2_ILIMIT)
-			== (0x20 << BP_POWER_5VCTRL_CHARGE_4P2_ILIMIT)) {
-			msleep(50);
-		}
+				/* if there is USB 2.0 current limitation requirement,
+				* waiting for USB enum done.
+				*/
+				if ((__raw_readl(REGS_POWER_BASE + HW_POWER_5VCTRL)
+					& BM_POWER_5VCTRL_CHARGE_4P2_ILIMIT) ==
+					(0x20 << BP_POWER_5VCTRL_CHARGE_4P2_ILIMIT)) {
+					dev_info(info->dev, "waiting USB enum done...\r\n");
+				}
+				while ((__raw_readl(REGS_POWER_BASE + HW_POWER_5VCTRL)
+					& BM_POWER_5VCTRL_CHARGE_4P2_ILIMIT)
+					== (0x20 << BP_POWER_5VCTRL_CHARGE_4P2_ILIMIT)) {
+					msleep(50);
+				}
 	#endif
 #endif
-				ddi_power_Enable4p2(450);
+				ddi_power_execute_battery_to_5v_handoff();
 
 				/* part of handling for errata.  It is
 				 *  now "somewhat" safe to
@@ -986,7 +986,7 @@ static int mxs_bat_probe(struct platform_device *pdev)
 
 
 	info->onboard_vbus5v = regulator_get(NULL, "vbus5v");
-	if (IS_ERR(info->regulator)) {
+	if (IS_ERR(info->onboard_vbus5v)) {
 
 		pr_debug("No onboard vbus 5v reg provided\n");
 		info->onboard_vbus5v = NULL;

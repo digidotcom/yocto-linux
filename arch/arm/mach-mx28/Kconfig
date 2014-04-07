@@ -150,6 +150,12 @@ config MEM_mDDR
 	help
 	  Say Y to select mDDR memory
 
+config WORKAROUND_ARCUSB_REG_RW
+	bool "work around mx28 arch register write for USB"
+	help
+	  MX28 require read ARC register before write. Use SWP intructure to
+	  implement this requirement.
+
 menu "CAN Port Options"
 	depends on CAN_FLEXCAN && MODULE_CCARDIMX28
 
@@ -270,6 +276,14 @@ config CCARDIMX28_DISP_RGB888
           LCD databus will be 24 bits.
 
 endchoice
+
+config CCARDIMX28_FUSION_7_10_MULTITOUCH
+	bool "Enable support for the Fusion 7/10 multi-touchscreen controller on the JSK board"
+	depends on (I2C_MXS || CONFIG_I2C_MXS_SELECT1)
+	select TOUCHSCREEN_FUSION_7_10
+	help
+	  This enables the support for the Fusion 7/10 multi-touch controller available in the
+	  fusion Touch Displays, connected to the JumpStart Kit board.
 
 endmenu
 

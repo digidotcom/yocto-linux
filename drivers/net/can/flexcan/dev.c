@@ -126,6 +126,7 @@ enum {
 	FLEXCAN_ATTR_BOFF_REC,
 	FLEXCAN_ATTR_TSYN,
 	FLEXCAN_ATTR_LISTEN,
+	FLEXCAN_ATTR_BERR_REPORTING,
 	FLEXCAN_ATTR_EXTEND_MSG,
 	FLEXCAN_ATTR_STANDARD_MSG,
 #ifdef CONFIG_CAN_DEBUG_DEVICES
@@ -186,6 +187,8 @@ static struct device_attribute flexcan_dev_attr[FLEXCAN_ATTR_MAX] = {
 	    __ATTR(tsyn, 0644, flexcan_show_attr, flexcan_set_attr),
 	[FLEXCAN_ATTR_LISTEN] =
 	    __ATTR(listen, 0644, flexcan_show_attr, flexcan_set_attr),
+	[FLEXCAN_ATTR_BERR_REPORTING] =
+	    __ATTR(berr_reporting, 0644, flexcan_show_attr, flexcan_set_attr),
 	[FLEXCAN_ATTR_EXTEND_MSG] =
 	    __ATTR(ext_msg, 0644, flexcan_show_attr, flexcan_set_attr),
 	[FLEXCAN_ATTR_STANDARD_MSG] =
@@ -414,6 +417,8 @@ static ssize_t flexcan_show_attr(struct device *dev,
 		return sprintf(buf, "%d\n", flexcan->tsyn);
 	case FLEXCAN_ATTR_LISTEN:
 		return sprintf(buf, "%d\n", flexcan->listen);
+	case FLEXCAN_ATTR_BERR_REPORTING:
+		return sprintf(buf, "%d\n", flexcan->berr_reporting);
 	case FLEXCAN_ATTR_EXTEND_MSG:
 		return sprintf(buf, "%d\n", flexcan->ext_msg);
 	case FLEXCAN_ATTR_STANDARD_MSG:
@@ -545,6 +550,9 @@ static ssize_t flexcan_set_attr(struct device *dev,
 	case FLEXCAN_ATTR_LISTEN:
 		flexcan->listen = tmp ? 1 : 0;
 		break;
+	case FLEXCAN_ATTR_BERR_REPORTING:
+		flexcan->berr_reporting = tmp ? 1 : 0;
+		break;
 	case FLEXCAN_ATTR_EXTEND_MSG:
 		flexcan->ext_msg = tmp ? 1 : 0;
 		break;
@@ -572,6 +580,7 @@ static void flexcan_device_default(struct flexcan_device *dev)
 	dev->srx_dis = plat_data->srx_dis;
 	dev->smp = plat_data->smp;
 	dev->boff_rec = plat_data->boff_rec;
+	dev->berr_reporting = plat_data->berr_reporting;
 
 	dev->maxmb = FLEXCAN_MAX_MB - 1;
 	dev->xmit_maxmb = (FLEXCAN_MAX_MB >> 1) - 1;

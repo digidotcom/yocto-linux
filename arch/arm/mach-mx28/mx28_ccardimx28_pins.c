@@ -953,9 +953,9 @@ int mx28_ccardimx28_video_pins_init(int databits)
 }
 #endif /* defined(CONFIG_FB_MXS) || defined(CONFIG_FB_MXS_MODULE) */
 
+static struct pin_desc mx28_ccardimx28_touch_pins[] = {
 #if (defined(CONFIG_TOUCHSCREEN_MXS) || defined(CONFIG_TOUCHSCREEN_MXS_MODULE)) && \
 	!defined(CONFIG_MXS_AUART1_4WIRE)
-static struct pin_desc mx28_ccardimx28_touch_pins[] = {
 	{
 		.name		= "LRADC2-DaisyChain",
 		.id		= PINID_SSP1_DATA0,
@@ -985,6 +985,21 @@ static struct pin_desc mx28_ccardimx28_touch_pins[] = {
 		.fun		= PIN_GPIO,
 		.output		= 0,
 	},
+#endif /* defined(CONFIG_TOUCHSCREEN_MXS) || defined(CONFIG_TOUCHSCREEN_MXS_MODULE) */
+
+#ifdef CONFIG_CCARDIMX28_FUSION_7_10_MULTITOUCH
+	{
+		.name		= "Touch interrupt",
+		.id		= PINID_LCD_CS,
+		.fun		= PIN_GPIO,
+		.pull		= 1,
+		.pullup		= 0,
+		.output		= 0,
+		.voltage	= PAD_3_3V,
+		.drive		= 1,
+		.sysfs		= 0,
+	}
+#endif /* CONFIG_CCARDIMX28_FUSION_7_10_MULTITOUCH */
 };
 
 void mx28_ccardimx28_touch_pins_init(void)
@@ -993,9 +1008,6 @@ void mx28_ccardimx28_touch_pins_init(void)
 	mx28_ccardimx28_init_pin_group(mx28_ccardimx28_touch_pins,
 				       ARRAY_SIZE(mx28_ccardimx28_touch_pins));
 }
-#else
-void mx28_ccardimx28_touch_pins_init(void) {}
-#endif /* defined(CONFIG_TOUCHSCREEN_MXS) || defined(CONFIG_TOUCHSCREEN_MXS_MODULE) */
 
 #if (defined(CONFIG_SERIAL_MXS_DUART) || defined(CONFIG_SERIAL_MXS_DUART_MODULE)) && \
     !defined(CONFIG_I2C_MXS_SELECT0)

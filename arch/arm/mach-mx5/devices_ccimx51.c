@@ -347,10 +347,25 @@ static struct i2c_board_info ccimx51_i2c_devices[] __initdata = {
 		I2C_BOARD_INFO("mt9v111_2", 0x90>>1),
 	},
 #endif
+#if defined (CONFIG_CCIMX5X_FUSION_4_MULTITOUCH)
+    {
+        I2C_BOARD_INFO("fusion_F04B", 0x05),
+        .irq = IOMUX_TO_IRQ(SECOND_TS_IRQ_PIN),
+    },
+#endif
+#if defined (CONFIG_CCIMX5X_FUSION_7_10_MULTITOUCH)
+    {
+        I2C_BOARD_INFO("fusion", 0x10),
+        .irq = IOMUX_TO_IRQ(SECOND_TS_IRQ_PIN),
+    },
+#endif
 };
 
 int __init ccimx51_init_i2c2(void)
 {
+#if defined (CONFIG_CCIMX5X_FUSION_4_MULTITOUCH) || defined(CONFIG_CCIMX5X_FUSION_7_10_MULTITOUCH)
+    ccimx51_fusion_gpio_init();
+#endif
 	return i2c_register_board_info(1, ccimx51_i2c_devices , ARRAY_SIZE(ccimx51_i2c_devices) );
 }
 

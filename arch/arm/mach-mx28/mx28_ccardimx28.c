@@ -59,6 +59,9 @@ static struct i2c_board_info __initdata mxs_i2c_device[] = {
 #if defined(CONFIG_SND_MXS_SOC_CCARDIMX28) || defined(CONFIG_SND_MXS_SOC_CCARDIMX28_MODULE)
 	{ I2C_BOARD_INFO("sgtl5000-i2c", 0xa), .flags = I2C_M_TEN },
 #endif
+#ifdef CONFIG_CCARDIMX28_FUSION_7_10_MULTITOUCH
+	{ I2C_BOARD_INFO("fusion", 0x10), /* Fusion 7 and Fusion 10 */	},
+#endif
 #if defined(CONFIG_W1_MASTER_DS2482) || defined(CONFIG_W1_MASTER_DS2482_MODULE)
 	{ I2C_BOARD_INFO("ds2482", 0x18), /*.flags = 0 */}
 #endif
@@ -92,6 +95,16 @@ static void __init mx28_ccardimx28_init_backlight(void)
 
 static void __init i2c_device_init(void)
 {
+#ifdef CONFIG_CCARDIMX28_FUSION_7_10_MULTITOUCH
+	int i;
+
+	for (i=0; i < ARRAY_SIZE(mxs_i2c_device); i++) {
+		if (!strcmp(mxs_i2c_device[i].type, "fusion")) {
+			mxs_i2c_device[i].irq = gpio_to_irq(MXS_PIN_TO_GPIO(PINID_LCD_CS));
+			break;
+		}
+	}
+#endif
 	i2c_register_board_info(1, mxs_i2c_device, ARRAY_SIZE(mxs_i2c_device));
 }
 

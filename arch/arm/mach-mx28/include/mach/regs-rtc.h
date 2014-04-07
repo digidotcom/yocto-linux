@@ -26,6 +26,7 @@
 #ifndef __ARCH_ARM___RTC_H
 #define __ARCH_ARM___RTC_H
 
+#define REGS_RTC_BASE	IO_ADDRESS(RTC_PHYS_ADDR)
 
 #define HW_RTC_CTRL	(0x00000000)
 #define HW_RTC_CTRL_SET	(0x00000004)

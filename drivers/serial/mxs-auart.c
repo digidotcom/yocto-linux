@@ -118,6 +118,8 @@ static inline void mxs_auart_tx_chars(struct mxs_auart_port *s)
 			if (uart_tx_stopped(&s->port))
 				mxs_auart_stop_tx(&s->port);
 		}
+		if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+			uart_write_wakeup(&s->port);
 		return;
 	}
 
@@ -474,9 +476,14 @@ static void mxs_auart_set_mctrl(struct uart_port *u, unsigned mctrl)
 	{
 		u32 ctrl = __raw_readl(u->membase + HW_UARTAPP_CTRL2);
 
-		ctrl &= ~BM_UARTAPP_CTRL2_RTS;
-		if (mctrl & TIOCM_RTS)
-			ctrl |= BM_UARTAPP_CTRL2_RTS;
+		ctrl &= ~(BM_UARTAPP_CTRL2_RTSEN | BM_UARTAPP_CTRL2_RTS);
+		if (mctrl & TIOCM_RTS) {
+			if (ctrl & BM_UARTAPP_CTRL2_CTSEN)
+				ctrl |= BM_UARTAPP_CTRL2_RTSEN;
+			else
+				ctrl |= BM_UARTAPP_CTRL2_RTS;
+		}
+
 		s->ctrl = mctrl;
 		__raw_writel(ctrl, u->membase + HW_UARTAPP_CTRL2);
 	}
@@ -595,13 +602,12 @@ static void mxs_auart_settermios(struct uart_port *u,
 
 static irqreturn_t mxs_auart_irq_handle(int irq, void *context)
 {
-	u32 istatus, istat;
 	struct mxs_auart_port *s = context;
-	u32 stat, ctrl2;
-	ctrl2 = __raw_readl(s->port.membase + HW_UARTAPP_CTRL2);
-	istatus = istat = __raw_readl(s->port.membase + HW_UARTAPP_INTR);
+	u32 istat = __raw_readl(s->port.membase + HW_UARTAPP_INTR);
+	u32 stat = __raw_readl(s->port.membase + HW_UARTAPP_STAT);
 
-	__raw_writel(istatus & (BM_UARTAPP_INTR_ABDIS
+	/* ack irq */
+	__raw_writel(istat & (BM_UARTAPP_INTR_ABDIS
 		| BM_UARTAPP_INTR_OEIS
 		| BM_UARTAPP_INTR_BEIS
 		| BM_UARTAPP_INTR_PEIS
@@ -615,47 +621,34 @@ static irqreturn_t mxs_auart_irq_handle(int irq, void *context)
 		| BM_UARTAPP_INTR_RIMIS),
 		s->port.membase + HW_UARTAPP_INTR_CLR);
 
-	stat = __raw_readl(s->port.membase + HW_UARTAPP_STAT);
-
 	if (istat & BM_UARTAPP_INTR_CTSMIS) {
-		/* Do nothing but clearing the status:
-		 * - If hardware flow control enabled, harware takes
-		 *   care of CTS.
-		 * - If software or no flow control, CTS does not
-		 *   need to be handled at all.
-		 * - If CTS is controlled with a GPIO, a special
-		 *   interrupt is triggered for it that manually
-		 *   handles CTS
+		/* Fast pulses on the CTS line may lead to a situation where the
+		 * CTS is asserted and generates an interrupt, but when the ISR
+		 * is called, the CTS line has already been deasserted. In this
+		 * case, we must do nothing. Consider only the case where CTS
+		 * is still asserted.
 		 */
-		istat &= ~BM_UARTAPP_INTR_CTSMIS;
+		if (stat & BM_UARTAPP_STAT_CTS)
+			uart_handle_cts_change(&s->port,
+					       stat & BM_UARTAPP_STAT_CTS);
 	}
 
-	if (istat & (BM_UARTAPP_INTR_RTIS | BM_UARTAPP_INTR_RXIS)) {
+	if (istat & (BM_UARTAPP_INTR_RTIS | BM_UARTAPP_INTR_RXIS))
 		mxs_auart_rx_chars(s);
-		istat &= ~(BM_UARTAPP_INTR_RTIS | BM_UARTAPP_INTR_RXIS);
-	}
 
-	if (istat & BM_UARTAPP_INTR_TXIS) {
+	if (istat & BM_UARTAPP_INTR_TXIS)
 		mxs_auart_tx_chars(s);
-		istat &= ~BM_UARTAPP_INTR_TXIS;
-	}
 
 	if( (istat & (BM_UARTAPP_INTR_FEIS | BM_UARTAPP_INTR_BEIS) ) ) {
 		// Long break, do nothing.
 	}
 	/* modem status interrupt bits are undefined
 	after reset,and the hardware do not support
-	DSRMIS,DCDMIS and RIMIS bit,so we should ingore
+	DSRMIS,DCDMIS and RIMIS bit,so we should ignore
 	them when they are pending. */
 	else if (istat & (BM_UARTAPP_INTR_ABDIS
 		| BM_UARTAPP_INTR_OEIS
-		| BM_UARTAPP_INTR_BEIS
-		| BM_UARTAPP_INTR_PEIS
-		| BM_UARTAPP_INTR_FEIS
-		| BM_UARTAPP_INTR_RTIS
-		| BM_UARTAPP_INTR_TXIS
-		| BM_UARTAPP_INTR_RXIS
-		| BM_UARTAPP_INTR_CTSMIS)) {
+		| BM_UARTAPP_INTR_PEIS)) {
 		dev_info(s->dev, "Unhandled status %x\n", istat);
 	}
 
@@ -842,6 +835,17 @@ static unsigned int mxs_auart_tx_empty(struct uart_port *u)
 		return 0;
 }
 
+/*
+ * Flush the transmit buffer.
+ * Locking: called with port lock held and IRQs disabled.
+ */
+static void mxs_auart_flush_buffer(struct uart_port *u)
+{
+	/* Wait for the FIFO to flush */
+	if (!mxs_auart_tx_empty(u))
+		msleep(u->timeout);
+}
+
 static void mxs_auart_start_tx(struct uart_port *u)
 {
 	struct mxs_auart_port *s = to_auart_port(u);
@@ -888,6 +892,7 @@ static struct uart_ops mxs_auart_ops = {
 	.get_mctrl      = mxs_auart_get_mctrl,
 	.startup	= mxs_auart_startup,
 	.shutdown       = mxs_auart_shutdown,
+	.flush_buffer	= mxs_auart_flush_buffer,
 	.set_termios    = mxs_auart_settermios,
 	.type	   	= mxs_auart_type,
 	.release_port   = mxs_auart_release_port,

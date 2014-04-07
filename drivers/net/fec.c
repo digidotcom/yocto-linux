@@ -151,6 +151,8 @@
 #define ACTIVITYLED_OFF_TIMEOUT	20	/* in jiffies */
 #endif
 
+#define FEC_MAX_IRQ 3
+
 /* The FEC buffer descriptors track the ring buffers.  The rx_bd_base and
  * tx_bd_base always point to the base of the buffer descriptors.  The
  * cur_rx and cur_tx point to the currently available buffer.
@@ -217,6 +219,7 @@ struct fec_enet_private {
 	unsigned int rxtx_cnt;
 	struct timer_list activityled_timer;
 #endif
+	int irq[FEC_MAX_IRQ];
 };
 
 /*
@@ -1295,6 +1298,29 @@ fec_set_mac_address(struct net_device *dev, void *p)
 	return 0;
 }
 
+#ifdef CONFIG_NET_POLL_CONTROLLER
+/*
+ * fec_poll_controller: FEC Poll controller function
+ * @dev: The FEC network adapter
+ *
+ * Polled functionality used by netconsole and others in non interrupt mode
+ *
+ */
+void fec_poll_controller(struct net_device *dev)
+{
+	int i;
+	struct fec_enet_private *fep = netdev_priv(dev);
+
+	for (i = 0; i < FEC_MAX_IRQ; i++) {
+		if (fep->irq[i] > 0) {
+			disable_irq(fep->irq[i]);
+			fec_enet_interrupt(fep->irq[i], dev);
+			enable_irq(fep->irq[i]);
+		}
+	}
+}
+#endif
+
 static const struct net_device_ops fec_netdev_ops = {
 	.ndo_open		= fec_enet_open,
 	.ndo_stop		= fec_enet_close,
@@ -1305,6 +1331,9 @@ static const struct net_device_ops fec_netdev_ops = {
 	.ndo_tx_timeout		= fec_timeout,
 	.ndo_set_mac_address	= fec_set_mac_address,
 	.ndo_do_ioctl           = fec_enet_ioctl,
+#ifdef CONFIG_NET_POLL_CONTROLLER
+    .ndo_poll_controller    = fec_poll_controller,
+#endif
 };
 
 static int fec_mac_addr_setup(char *mac_addr)
@@ -1634,7 +1663,7 @@ fec_probe(struct platform_device *pdev)
 		memcpy(fec_mac_default, pdata->mac, sizeof(fec_mac_default));
 
 	/* This device has up to three irqs on some platforms */
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < FEC_MAX_IRQ; i++) {
 		irq = platform_get_irq(pdev, i);
 		if (i && irq < 0)
 			break;
@@ -1647,6 +1676,7 @@ fec_probe(struct platform_device *pdev)
 			}
 			goto failed_irq;
 		}
+		fep->irq[i] = irq;
 	}
 
 #if defined(CONFIG_CCARDIMX28_ENET0_LEDS) || defined(CONFIG_CCARDIMX28_ENET1_LEDS)
