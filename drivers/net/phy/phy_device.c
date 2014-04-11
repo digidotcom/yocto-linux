@@ -33,6 +33,7 @@
 #include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <linux/phy.h>
+#include <linux/micrel_phy.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -724,16 +725,36 @@ static int genphy_setup_forced(struct phy_device *phydev)
 int genphy_restart_aneg(struct phy_device *phydev)
 {
 	int ctl;
+	struct phy_driver *pdrv = phydev->drv;
 
 	ctl = phy_read(phydev, MII_BMCR);
 
 	if (ctl < 0)
 		return ctl;
 
-	ctl |= (BMCR_ANENABLE | BMCR_ANRESTART);
-
 	/* Don't isolate the PHY if we're negotiating */
 	ctl &= ~(BMCR_ISOLATE);
+
+	/* Micrel KSZ8021/8031/8051 before silicon rev-A2 have an errata
+	 * to not use the ANRESTART flag, instead toggle the ANE flag to
+	 * restart the autonegotiation.
+	 */
+	if ( ((pdrv->phy_id & MICREL_PHY_ID_MASK) ==
+		(PHY_ID_KSZ8031 & MICREL_PHY_ID_MASK)) &&
+		((pdrv->phy_id & 0x0000000F) < 6) ) {
+
+		/* Set also reg to 100/Full to not send 10Mbit link pulses */
+		ctl |= (BMCR_SPEED100 | BMCR_FULLDPLX);
+		ctl &= ~(BMCR_ANENABLE);
+
+		phy_write(phydev, MII_BMCR, ctl);
+
+		udelay(500);
+
+		ctl |= (BMCR_ANENABLE);
+	}
+	else
+		ctl |= (BMCR_ANENABLE | BMCR_ANRESTART);
 
 	ctl = phy_write(phydev, MII_BMCR, ctl);
 

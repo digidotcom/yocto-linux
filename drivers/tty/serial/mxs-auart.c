@@ -89,6 +89,7 @@
 #define AUART_CTRL2_RTS				(1 << 11)
 #define AUART_CTRL2_RXE				(1 << 9)
 #define AUART_CTRL2_TXE				(1 << 8)
+#define AUART_CTRL2_USE_LCR2			(1 << 6)
 #define AUART_CTRL2_UARTEN			(1 << 0)
 
 #define AUART_LINECTRL_BAUD_DIVINT_SHIFT	16
@@ -265,6 +266,9 @@ static void mxs_auart_tx_chars(struct mxs_auart_port *s)
 				     CIRC_CNT_TO_END(xmit->head,
 						     xmit->tail,
 						     UART_XMIT_SIZE));
+
+			s->port.icount.tx += size;
+
 			memcpy(buffer + i, xmit->buf + xmit->tail, size);
 			xmit->tail = (xmit->tail + size) & (UART_XMIT_SIZE - 1);
 
@@ -463,6 +467,8 @@ static void dma_rx_callback(void *arg)
 
 	count = stat & AUART_STAT_RXCOUNT_MASK;
 	tty_insert_flip_string(port, s->rx_dma_buf, count);
+
+	s->port.icount.rx += count;
 
 	writel(stat, s->port.membase + AUART_STAT);
 	tty_flip_buffer_push(port);
@@ -675,6 +681,8 @@ static void mxs_auart_settermios(struct uart_port *u,
 	ctrl |= AUART_LINECTRL_BAUD_DIVINT(div >> 6);
 
 	writel(ctrl, u->membase + AUART_LINECTRL);
+	/* We asked to control the TX line separately, so set it */
+	writel(ctrl, u->membase + AUART_LINECTRL2);
 	writel(ctrl2, u->membase + AUART_CTRL2);
 
 	uart_update_timeout(u, termios->c_cflag, baud);
@@ -743,7 +751,9 @@ static int mxs_auart_startup(struct uart_port *u)
 
 	writel(AUART_CTRL0_CLKGATE, u->membase + AUART_CTRL0_CLR);
 
-	writel(AUART_CTRL2_UARTEN, u->membase + AUART_CTRL2_SET);
+	/* USE_LCR2 so we can control the TX and RX fifo separately */
+	writel(AUART_CTRL2_UARTEN | AUART_CTRL2_USE_LCR2,
+	       u->membase + AUART_CTRL2_SET);
 
 	writel(AUART_INTR_RXIEN | AUART_INTR_RTIEN | AUART_INTR_CTSMIEN,
 			u->membase + AUART_INTR);
@@ -756,6 +766,8 @@ static int mxs_auart_startup(struct uart_port *u)
 	 * output (otherwise, only the LSB is written, ie. 1 in 4 bytes)
 	 */
 	writel(AUART_LINECTRL_FEN, u->membase + AUART_LINECTRL_SET);
+	/* Set TX */
+	writel(AUART_LINECTRL_FEN, u->membase + AUART_LINECTRL2_SET);
 
 	/*
 	 * The DMA has a bug(see errata:2836) in mx23.
@@ -829,8 +841,22 @@ static void mxs_auart_flush_buffer(struct uart_port *u)
 		spin_unlock(&s->port.lock);
 		dmaengine_terminate_all(channel);
 		spin_lock(&s->port.lock);
+
+		if (s->flags & MXS_AUART_DMA_TX_SYNC) {
+			dma_unmap_sg(s->dev, &s->tx_sgl, 1, DMA_TO_DEVICE);
+
+			/* clear the bit used to serialize the DMA tx. */
+			clear_bit(MXS_AUART_DMA_TX_SYNC, &s->flags);
+			smp_mb__after_clear_bit();
+		}
 	}
-	/* Wait for the FIFO to flush */
+
+	/* To drain TX FIFO, toggle the TX FIFO enable bit twice */
+	writel(AUART_LINECTRL_FEN, u->membase + AUART_LINECTRL2_TOG);
+	udelay(1);
+	writel(AUART_LINECTRL_FEN, u->membase + AUART_LINECTRL2_TOG);
+
+	/* Wait for the last byte to flush */
 	if (!mxs_auart_tx_empty(u))
 		msleep(u->timeout);
 }
@@ -1069,7 +1095,8 @@ static int serial_mxs_probe_dt(struct mxs_auart_port *s,
 	}
 	s->port.line = ret;
 
-	s->flags |= MXS_AUART_DMA_CONFIG;
+	if (!of_property_read_bool(np, "fsl,disable-dma"))
+		s->flags |= MXS_AUART_DMA_CONFIG;
 
 	return 0;
 }

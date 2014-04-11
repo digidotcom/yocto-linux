@@ -338,19 +338,44 @@ int phy_mii_ioctl(struct phy_device *phydev,
 					phydev->autoneg = AUTONEG_ENABLE;
 					phydev->link_timeout = PHY_AN_TIMEOUT;
 				}
-				if ((!phydev->autoneg) && (val & BMCR_FULLDPLX))
-					phydev->duplex = DUPLEX_FULL;
-				else
-					phydev->duplex = DUPLEX_HALF;
-				if ((!phydev->autoneg) &&
-						(val & BMCR_SPEED1000))
-					phydev->speed = SPEED_1000;
-				else if ((!phydev->autoneg) &&
-						(val & BMCR_SPEED100))
-					phydev->speed = SPEED_100;
+				if (!phydev->autoneg) {
+					if (val & BMCR_FULLDPLX)
+						phydev->duplex = DUPLEX_FULL;
+					else
+						phydev->duplex = DUPLEX_HALF;
+
+					if (val & BMCR_SPEED1000)
+						phydev->speed = SPEED_1000;
+					else if (val & BMCR_SPEED100)
+						phydev->speed = SPEED_100;
+					else
+						phydev->speed = SPEED_10;
+				}
 				break;
 			case MII_ADVERTISE:
-				phydev->advertising = val;
+				/* Convert PHY's advertising settings to ethtool
+				 * advertising settings
+				 */
+				phydev->advertising = 0;
+				if (val & ADVERTISE_10HALF)
+					phydev->advertising |=
+						ADVERTISED_10baseT_Half;
+				if (val & ADVERTISE_10FULL)
+					phydev->advertising |=
+						ADVERTISED_10baseT_Full;
+				if (val & ADVERTISE_100HALF)
+					phydev->advertising |=
+						ADVERTISED_100baseT_Half;
+				if (val & ADVERTISE_100FULL)
+					phydev->advertising |=
+						ADVERTISED_100baseT_Full;
+				if (val & ADVERTISE_PAUSE_CAP)
+					phydev->advertising |=
+						ADVERTISED_Pause;
+				if (val & ADVERTISE_PAUSE_ASYM)
+					phydev->advertising |=
+						ADVERTISED_Asym_Pause;
+
 				break;
 			default:
 				/* do nothing */
@@ -807,20 +832,28 @@ void phy_state_machine(struct work_struct *work)
 			 * and AN is enabled, disable AN, wait 500usec and
 			 * enable AN again to workaround PHY errata.
 			 */
-			if (phydev->autoneg &&
-			    (pdrv->phy_id == PHY_ID_KSZ8051 ||
-			     pdrv->phy_id == PHY_ID_KSZ8031 ||
-			     pdrv->phy_id == PHY_ID_KSZ8021)) {
+			if ( phydev->autoneg &&
+			    ((pdrv->phy_id & MICREL_PHY_ID_MASK) ==
+			     (PHY_ID_KSZ8031 & MICREL_PHY_ID_MASK)) ) {
 
 				if (0 == phydev->link_timeout--) {
 					int regval;
 
 					regval = phy_read(phydev, MII_BMCR);
-					phy_write(phydev, MII_BMCR,
-						  regval & ~BMCR_ANENABLE);
-					udelay(500);
-					phy_write(phydev, MII_BMCR,
-						  regval | BMCR_ANENABLE);
+
+					/* Toggle ANE only for PHYs before rev A2 */
+					if ((pdrv->phy_id & 0x0000000F) < 6) {
+						phy_write(phydev, MII_BMCR,
+							regval & ~BMCR_ANENABLE);
+						udelay(500);
+						phy_write(phydev, MII_BMCR,
+							regval | BMCR_ANENABLE);
+					}
+					else {
+						phy_write(phydev, MII_BMCR,
+							regval | BMCR_ANRESTART);
+					}
+
 					phydev->link_timeout = PHY_AN_TIMEOUT;
 				}
 			}
