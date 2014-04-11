@@ -291,6 +291,7 @@ static void __init mx28_cpx2_init_machine(void)
 
 	/* Register the fixup for the PHY */
 	phy_register_fixup_for_uid(PHY_ID_KSZ8031, MICREL_PHY_ID_MASK, ksz8031_phy_fixup);
+	phy_register_fixup_for_uid(PHY_ID_KSZ8081, MICREL_PHY_ID_MASK, ksz8031_phy_fixup);
 
 	/* init the system revesion */
 	system_rev = 0x28011;

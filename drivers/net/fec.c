@@ -207,6 +207,7 @@ struct fec_enet_private {
 	int	index;
 	int	link;
 	int	full_duplex;
+	int	speed;
 	struct  completion mdio_done;
 
 	struct	fec_ptp_private *ptp_priv;
@@ -781,29 +782,34 @@ static void fec_enet_adjust_link(struct net_device *dev)
 		goto spin_unlock;
 	}
 
-	/* Duplex link change */
 	if (phy_dev->link) {
-		if (fep->full_duplex != phy_dev->duplex) {
-			fec_restart(dev, phy_dev->duplex);
+		if (fep->full_duplex != phy_dev->duplex)
+			status_change = 1;
+
+		if (fep->speed != phy_dev->speed) {
+			fep->speed = phy_dev->speed;
 			status_change = 1;
 		}
-	}
 
-	/* Link on or off change */
-	if (phy_dev->link != fep->link) {
-		fep->link = phy_dev->link;
-		if (phy_dev->link) {
+		if (!fep->link) {
+			fep->link = phy_dev->link;
+			status_change = 2;
+		}
+
+		/* if any of the above changed restart the FEC */
+		if (status_change)
 			fec_restart(dev, phy_dev->duplex);
 
-			/* if link becomes up and tx be stopped, start it */
-			if (netif_queue_stopped(dev)) {
-				netif_start_queue(dev);
-				netif_wake_queue(dev);
-			}
-		}
-		else
+		/* if link becomes up and tx be stopped, start it */
+		if (status_change == 2)
+			netif_wake_queue(dev);
+	}
+	else {
+		if (fep->link) {
 			fec_stop(dev);
-		status_change = 1;
+			fep->link = phy_dev->link;
+			status_change = 1;
+		}
 	}
 
 spin_unlock:
@@ -944,7 +950,6 @@ static struct mii_bus *fec_enet_mii_init(struct platform_device *pdev)
 #endif
 	fep->phy_speed = BF_ENET_MSCR_MII_SPEED(
 				DIV_ROUND_UP(clk_get_rate(pclk), 5000000));
-
 #ifdef CONFIG_ARCH_MXS
 	/*
 	 * Set holdtime to 10ns to comply with IEEE802.3 clause 22
@@ -1055,11 +1060,23 @@ static u32 fec_enet_get_link(struct net_device *dev)
 		return (u32)(-EINVAL);
 }
 
+static int fec_enet_nway_reset(struct net_device *dev)
+{
+	struct fec_enet_private *fep = netdev_priv(dev);
+	struct phy_device *phydev = fep->phy_dev;
+
+	if (!phydev)
+		return -ENODEV;
+
+	return genphy_restart_aneg(phydev);
+}
+
 static struct ethtool_ops fec_enet_ethtool_ops = {
 	.get_settings		= fec_enet_get_settings,
 	.set_settings		= fec_enet_set_settings,
 	.get_drvinfo		= fec_enet_get_drvinfo,
 	.get_link		= fec_enet_get_link,
+	.nway_reset		= fec_enet_nway_reset,
 };
 
 static int fec_enet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)

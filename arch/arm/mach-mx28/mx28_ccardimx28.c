@@ -455,6 +455,7 @@ static void __init mx28_ccardimx28_init_machine(void)
 #ifdef CONFIG_MICREL_PHY
 	/* Register the fixup for the PHYs */
 	phy_register_fixup_for_uid(PHY_ID_KSZ8031, MICREL_PHY_ID_MASK, ksz8031_phy_fixup);
+	phy_register_fixup_for_uid(PHY_ID_KSZ8081, MICREL_PHY_ID_MASK, ksz8031_phy_fixup);
 #endif
 
 	/* init the system revision */
