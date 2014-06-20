@@ -696,7 +696,7 @@ static inline void ehci_writel(const struct ehci_hcd *ehci,
 		writel_be(val, regs) :
 		writel(val, regs);
 #else
-	if (IS_ENABLED(CONFIG_SOC_IMX28) && ehci->imx28_write_fix)
+	if (ehci->imx28_write_fix)
 		imx28_ehci_writel(val, regs);
 	else
 		writel(val, regs);
