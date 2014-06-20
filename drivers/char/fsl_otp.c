@@ -52,6 +52,7 @@
 #define HW_OCOTP_DATA			0x00000020
 
 #define HW_OCOTP_CUST_N(n)	(0x00000400 + (n) * 0x10)
+#define HW_OCTP_IDX_MAC0	0x22
 #define HW_OCTP_IDX_MAC1	0x23
 
 #define BF(value, field)	(((value) << BP_##field) & BM_##field)
@@ -217,13 +218,12 @@ out:
 }
 
 static int fsl_register_hwid(void) {
-	struct device_node *np;
-	u32 ocotp;
-	u8 *hwid;
+	struct device_node *np = NULL;
+	u32 mac0, mac1;
 	char str[20];
 	struct property *hwidprop;
 	const char *hwidpropname;
-	int ret, i;
+	int i;
 	const char *propnames[] = {
 		"digi,hwid,tf",
 		"digi,hwid,variant",
@@ -234,43 +234,50 @@ static int fsl_register_hwid(void) {
 		"digi,hwid,sn",
 	};
 
-	np = of_find_compatible_node(NULL, NULL, "digi,ccimx6adpt");
+	if (of_machine_is_compatible("digi,ccimx6sbc"))
+		np = of_find_compatible_node(NULL, NULL, "digi,ccimx6sbc");
+	else if (of_machine_is_compatible("digi,ccimx6adpt"))
+		np = of_find_compatible_node(NULL, NULL, "digi,ccimx6adpt");
+
 	if (!np)
 		return -EINVAL;
 
-	if(fsl_otp_read(HW_OCTP_IDX_MAC1, &ocotp) != 0)
+	/* Retrieve HWID from OTP bits */
+	if (fsl_otp_read(HW_OCTP_IDX_MAC0, &mac0) ||
+	    fsl_otp_read(HW_OCTP_IDX_MAC1, &mac1))
 		return -EINVAL;
 
-	/* Retrieve HWID from OTP bits */
-	hwid = (u8 *)&ocotp;
-
 	/*
-	* Try to read the HWID fields from DT. If not found, create those
-	* properties from the information on the OTP bits.
-	*/
+	 * Try to read the HWID fields from DT. If not found, create those
+	 * properties from the information on the OTP bits:
+	 *  +------------------------------+----------------------------+
+	 *  |              MAC1            |            MAC0            |
+	 *  +-----[19.16][15..8][7.4][3.0] | [31..24][23.20][19......0] |
+	 *  |        TF  VARIANT  HV  CERT |   YEAR   MONTH     S/N     |
+	 *  +------------------------------+----------------------------+
+	 */
 	for (i = 0; i < ARRAY_SIZE(propnames); i++) {
-		ret = of_property_read_string(np, propnames[i], &hwidpropname);
-		if (ret) {
-		/* Convert HWID fields to strings */
-		if (!strcmp("digi,hwid,tf", propnames[i]))
-			sprintf(str, "0x%02x", hwid[6]);
+		if (of_property_read_string(np, propnames[i], &hwidpropname)) {
+			/* Convert HWID fields to strings */
+			if (!strcmp("digi,hwid,tf", propnames[i]))
+				sprintf(str, "0x%02x", (mac1 >> 16) & 0xf);
 			else if (!strcmp("digi,hwid,variant", propnames[i]))
-				sprintf(str, "0x%02x", hwid[5]);
+				sprintf(str, "0x%02x", (mac1 >> 8) & 0xff);
 			else if (!strcmp("digi,hwid,hv", propnames[i]))
-				sprintf(str, "0x%x", hwid[4] >> 4);
+				sprintf(str, "0x%x", (mac1 >> 4) & 0xf);
 			else if (!strcmp("digi,hwid,cert", propnames[i]))
-				sprintf(str, "0x%x", hwid[4] & 0xf);
+				sprintf(str, "0x%x", mac1 & 0xf);
 			else if (!strcmp("digi,hwid,year", propnames[i]))
-				sprintf(str, "20%02d", hwid[3]);
+				sprintf(str, "20%02d", (mac0 >> 24) & 0xff);
 			else if (!strcmp("digi,hwid,month", propnames[i]))
-				sprintf(str, "%02d", hwid[2] >> 4);
+				sprintf(str, "%02d", (mac0 >> 20) & 0xf);
 			else if (!strcmp("digi,hwid,sn", propnames[i]))
-				sprintf(str, "%d", (&ocotp)[0] & 0xfffff);
+				sprintf(str, "%d", mac0 & 0xfffff);
 			else
 				continue;
 
 			hwidprop = kzalloc(sizeof(*hwidprop) + strlen(str),
-				GFP_KERNEL);
+				           GFP_KERNEL);
 			if (!hwidprop)
 				return -ENOMEM;
 
@@ -285,6 +292,7 @@ static int fsl_register_hwid(void) {
 			of_update_property(np, hwidprop);
 		}
 	}
+
 	return 0;
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2013 Freescale Semiconductor, Inc.
+ * Copyright 2012-2014 Freescale Semiconductor, Inc.
  *
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -9,13 +9,32 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+#ifndef __DRIVER_USB_CHIPIDEA_CI_HDRC_IMX_H
+#define __DRIVER_USB_CHIPIDEA_CI_HDRC_IMX_H
+
+#include <linux/usb/otg.h>
+
 struct imx_usbmisc_data {
 	int index;
 
 	unsigned int disable_oc:1; /* over current detect disabled */
+	unsigned int oc_pol:1; /* overcurrent polarity is active low */
+	unsigned int pwr_pol:1; /* power line polarity is active high */
 	unsigned int evdo:1; /* set external vbus divider option */
+	/*
+	 * Specifies the delay between powering up the xtal 24MHz clock
+	 * and release the clock to the digital logic inside the analog block
+	 */
+	unsigned int osc_clkgate_delay;
+	struct regmap *anatop;
+	enum usb_dr_mode available_role;
 };
 
 int imx_usbmisc_init(struct imx_usbmisc_data *);
 int imx_usbmisc_init_post(struct imx_usbmisc_data *);
 int imx_usbmisc_set_wakeup(struct imx_usbmisc_data *, bool);
+/* Call it before setting portsc.suspendM */
+int imx_usbmisc_hsic_set_connect(struct imx_usbmisc_data *);
+int imx_usbmisc_hsic_set_clk(struct imx_usbmisc_data *, bool);
+
+#endif /* __DRIVER_USB_CHIPIDEA_CI_HDRC_IMX_H */

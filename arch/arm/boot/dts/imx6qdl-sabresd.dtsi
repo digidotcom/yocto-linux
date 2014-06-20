@@ -35,6 +35,28 @@
 		status = "okay";
 	};
 
+	hannstar_cabc {
+		compatible = "hannstar,cabc";
+
+		lvds0 {
+			gpios = <&gpio6 15 GPIO_ACTIVE_HIGH>;
+		};
+
+		lvds1 {
+			gpios = <&gpio6 16 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		charger-led {
+			gpios = <&gpio1 2 0>;
+			linux,default-trigger = "max8903-charger-charging";
+			retain-state-suspended;
+		};
+	};
+
 	regulators {
 		compatible = "simple-bus";
 
@@ -85,20 +107,20 @@
 		compatible = "gpio-keys";
 		power {
 			label = "Power Button";
-			gpios = <&gpio3 29 0>;
+			gpios = <&gpio3 29 1>;
 			linux,code = <116>; /* KEY_POWER */
 			gpio-key,wakeup;
 		};
 
 		volume-up {
 			label = "Volume Up";
-			gpios = <&gpio1 4 0>;
+			gpios = <&gpio1 4 1>;
 			linux,code = <115>; /* KEY_VOLUMEUP */
 		};
 
 		volume-down {
 			label = "Volume Down";
-			gpios = <&gpio1 5 0>;
+			gpios = <&gpio1 5 1>;
 			linux,code = <114>; /* KEY_VOLUMEDOWN */
 		};
 	};
@@ -211,11 +233,6 @@
 	v4l2_out {
 		compatible = "fsl,mxc_v4l2_output";
 		status = "okay";
-	};
-
-	lvds_cabc_ctrl {
-		lvds0-gpios = <&gpio6 15 0>;
-		lvds1-gpios = <&gpio6 16 0>;
 	};
 
 	mipi_dsi_reset: mipi-dsi-reset {
@@ -340,6 +357,7 @@
 		pwn-gpios = <&gpio1 16 1>;   /* active low: SD1_DAT0 */
 		rst-gpios = <&gpio1 17 0>;   /* active high: SD1_DAT1 */
 		csi_id = <0>;
+		ipu_id = <0>;
 		mclk = <24000000>;
 		mclk_source = <0>;
 	};
@@ -384,6 +402,7 @@
 		pwn-gpios = <&gpio1 19 1>;   /* active low: SD1_CLK */
 		rst-gpios = <&gpio1 20 0>;   /* active high: SD1_DAT2 */
 		csi_id = <1>;
+		ipu_id = <1>;
 		mclk = <24000000>;
 		mclk_source = <0>;
 	};
@@ -577,6 +596,7 @@
 				MX6QDL_PAD_SD3_RST__GPIO7_IO08 0x80000000
 				MX6QDL_PAD_GPIO_9__GPIO1_IO09 0x80000000
 				MX6QDL_PAD_GPIO_1__WDOG2_B 0x80000000
+				MX6QDL_PAD_GPIO_2__GPIO1_IO02 0x80000000
 			>;
 		};
 	};
@@ -602,7 +622,7 @@
 
 &mipi_dsi {
 	dev_id = <0>;
-	disp_id = <0>;
+	disp_id = <1>;
 	lcd_panel = "TRULY-WVGA";
 	disp-power-on-supply = <&reg_mipi_dsi_pwr_on>;
 	resets = <&mipi_dsi_reset>;
@@ -652,6 +672,8 @@
 	cd-gpios = <&gpio2 2 0>;
 	wp-gpios = <&gpio2 3 0>;
 	no-1-8-v;
+	keep-power-in-suspend;
+	enable-sdio-wakeup;
 	status = "okay";
 };
 
@@ -661,6 +683,8 @@
 	cd-gpios = <&gpio2 0 0>;
 	wp-gpios = <&gpio2 1 0>;
 	no-1-8-v;
+	keep-power-in-suspend;
+	enable-sdio-wakeup;
 	status = "okay";
 };
 
@@ -670,6 +694,7 @@
         bus-width = <8>;
         non-removable;
         no-1-8-v;
+	keep-power-in-suspend;
         status = "okay";
 };
 

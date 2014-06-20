@@ -117,6 +117,8 @@
 #define ESDHC_FLAG_HAVE_CAP1		BIT(6)
 /* The IP has errata ERR004536 */
 #define ESDHC_FLAG_ERR004536		BIT(7)
+/* need request bus freq during low power */
+#define ESDHC_FLAG_BUSFREQ		BIT(8)
 
 struct esdhc_soc_data {
 	u32 flags;
@@ -144,7 +146,8 @@ static struct esdhc_soc_data usdhc_imx6q_data = {
 
 static struct esdhc_soc_data usdhc_imx6sl_data = {
 	.flags = ESDHC_FLAG_USDHC | ESDHC_FLAG_STD_TUNING
-			| ESDHC_FLAG_HAVE_CAP1 | ESDHC_FLAG_ERR004536,
+			| ESDHC_FLAG_HAVE_CAP1 | ESDHC_FLAG_ERR004536
+			| ESDHC_FLAG_BUSFREQ,
 };
 
 struct pltfm_imx_data {
@@ -941,6 +944,7 @@ sdhci_esdhc_imx_probe_dt(struct platform_device *pdev,
 			 struct esdhc_platform_data *boarddata)
 {
 	struct device_node *np = pdev->dev.of_node;
+	struct sdhci_host *host = platform_get_drvdata(pdev);
 
 	if (!np)
 		return -ENODEV;
@@ -971,6 +975,12 @@ sdhci_esdhc_imx_probe_dt(struct platform_device *pdev,
 
 	if (of_property_read_u32(np, "fsl,delay-line", &boarddata->delay_line))
 		boarddata->delay_line = 0;
+
+	if (of_find_property(np, "keep-power-in-suspend", NULL))
+		host->mmc->pm_caps |= MMC_PM_KEEP_POWER;
+
+	if (of_find_property(np, "enable-sdio-wakeup", NULL))
+		host->mmc->pm_caps |= MMC_PM_WAKE_SDIO_IRQ;
 
 	return 0;
 }
@@ -1029,7 +1039,8 @@ static int sdhci_esdhc_imx_probe(struct platform_device *pdev)
 
 	pltfm_host->clk = imx_data->clk_per;
 
-	request_bus_freq(BUS_FREQ_HIGH);
+	if (imx_data->socdata->flags & ESDHC_FLAG_BUSFREQ)
+		request_bus_freq(BUS_FREQ_HIGH);
 
 	clk_prepare_enable(imx_data->clk_per);
 	clk_prepare_enable(imx_data->clk_ipg);
@@ -1163,6 +1174,10 @@ static int sdhci_esdhc_imx_probe(struct platform_device *pdev)
 		host->quirks2 |= SDHCI_QUIRK2_NO_1_8_V;
 	}
 
+	if (host->mmc->pm_caps & MMC_PM_KEEP_POWER &&
+		host->mmc->pm_caps & MMC_PM_WAKE_SDIO_IRQ)
+		device_init_wakeup(&pdev->dev, 1);
+
 	err = sdhci_add_host(host);
 	if (err)
 		goto disable_clk;
@@ -1179,7 +1194,8 @@ disable_clk:
 	clk_disable_unprepare(imx_data->clk_per);
 	clk_disable_unprepare(imx_data->clk_ipg);
 	clk_disable_unprepare(imx_data->clk_ahb);
-	release_bus_freq(BUS_FREQ_HIGH);
+	if (imx_data->socdata->flags & ESDHC_FLAG_BUSFREQ)
+		release_bus_freq(BUS_FREQ_HIGH);
 free_sdhci:
 	sdhci_pltfm_free(pdev);
 	return err;
@@ -1214,7 +1230,8 @@ static int sdhci_esdhc_runtime_suspend(struct device *dev)
 	clk_disable_unprepare(imx_data->clk_ipg);
 	clk_disable_unprepare(imx_data->clk_ahb);
 
-	release_bus_freq(BUS_FREQ_HIGH);
+	if (imx_data->socdata->flags & ESDHC_FLAG_BUSFREQ)
+		release_bus_freq(BUS_FREQ_HIGH);
 
 	return ret;
 }
@@ -1225,7 +1242,8 @@ static int sdhci_esdhc_runtime_resume(struct device *dev)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct pltfm_imx_data *imx_data = pltfm_host->priv;
 
-	request_bus_freq(BUS_FREQ_HIGH);
+	if (imx_data->socdata->flags & ESDHC_FLAG_BUSFREQ)
+		request_bus_freq(BUS_FREQ_HIGH);
 
 	clk_prepare_enable(imx_data->clk_per);
 	clk_prepare_enable(imx_data->clk_ipg);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2008-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -131,10 +131,6 @@ ipu_csi_init_interface(struct ipu_soc *ipu, uint16_t width, uint16_t height,
 
 	ipu_csi_write(ipu, csi, data, CSI_SENS_CONF);
 
-	/* Setup the mclk */
-	if (cfg_param.mclk > 0)
-		_ipu_csi_mclk_set(ipu, cfg_param.mclk, csi);
-
 	/* Setup sensor frame size */
 	ipu_csi_write(ipu, csi, (width - 1) | (height - 1) << 16, CSI_SENS_FRM_SIZE);
 
@@ -146,6 +142,21 @@ ipu_csi_init_interface(struct ipu_soc *ipu, uint16_t width, uint16_t height,
 		if (width == 720 && height == 625) {
 			/* PAL case */
 			/*
+			 * Field0BlankEnd = 0x6, Field0BlankStart = 0x2,
+			 * Field0ActiveEnd = 0x4, Field0ActiveStart = 0
+			 */
+			ipu_csi_write(ipu, csi, 0x40596, CSI_CCIR_CODE_1);
+			/*
+			 * Field1BlankEnd = 0x7, Field1BlankStart = 0x3,
+			 * Field1ActiveEnd = 0x5, Field1ActiveStart = 0x1
+			 */
+			ipu_csi_write(ipu, csi, 0xD07DF, CSI_CCIR_CODE_2);
+
+			ipu_csi_write(ipu, csi, 0xFF0000, CSI_CCIR_CODE_3);
+
+		} else if (width == 720 && height == 525) {
+			/* NTSC case */
+			/*
 			 * Field0BlankEnd = 0x7, Field0BlankStart = 0x3,
 			 * Field0ActiveEnd = 0x5, Field0ActiveStart = 0x1
 			 */
@@ -155,20 +166,6 @@ ipu_csi_init_interface(struct ipu_soc *ipu, uint16_t width, uint16_t height,
 			 * Field1ActiveEnd = 0x4, Field1ActiveStart = 0
 			 */
 			ipu_csi_write(ipu, csi, 0x40596, CSI_CCIR_CODE_2);
-			ipu_csi_write(ipu, csi, 0xFF0000, CSI_CCIR_CODE_3);
-
-		} else if (width == 720 && height == 525) {
-			/* NTSC case */
-			/*
-			 * Field1BlankEnd = 0x6, Field1BlankStart = 0x2,
-			 * Field1ActiveEnd = 0x4, Field1ActiveStart = 0
-			 */
-			ipu_csi_write(ipu, csi, 0x40596, CSI_CCIR_CODE_1);
-			/*
-			 * Field0BlankEnd = 0x7, Field0BlankStart = 0x3,
-			 * Field0ActiveEnd = 0x5, Field0ActiveStart = 0x1
-			 */
-			ipu_csi_write(ipu, csi, 0xD07DF, CSI_CCIR_CODE_2);
 			ipu_csi_write(ipu, csi, 0xFF0000, CSI_CCIR_CODE_3);
 		} else {
 			dev_err(ipu->dev, "Unsupported CCIR656 interlaced "
@@ -759,6 +756,32 @@ int _ipu_csi_init(struct ipu_soc *ipu, ipu_channel_t channel, uint32_t csi)
 		CSI_SENS_CONF_DATA_DEST_SHIFT), CSI_SENS_CONF);
 err:
 	return retval;
+}
+
+void ipu_csi_dump_registers(struct ipu_soc *ipu, uint32_t csi)
+{
+	dev_dbg(ipu->dev, "CSI%d_SENS_CONF[%08x] = \t0x%08X\n", csi,
+		CSI_SENS_CONF, ipu_csi_read(ipu, csi , CSI_SENS_CONF));
+	dev_dbg(ipu->dev, "CSI%d_SENS_FRM_SIZE = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_SENS_FRM_SIZE));
+	dev_dbg(ipu->dev, "CSI%d_ACT_FRM_SIZE = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_ACT_FRM_SIZE));
+	dev_dbg(ipu->dev, "CSI%d_ACT_FRM_SIZE = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_ACT_FRM_SIZE));
+	dev_dbg(ipu->dev, "CSI%d_OUT_FRM_CTRL = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_OUT_FRM_CTRL));
+	dev_dbg(ipu->dev, "CSI%d_TST_CTRL = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_TST_CTRL));
+	dev_dbg(ipu->dev, "CSI%d_CCIR_CODE_1 = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_CCIR_CODE_1));
+	dev_dbg(ipu->dev, "CSI%d_CCIR_CODE_2 = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_CCIR_CODE_2));
+	dev_dbg(ipu->dev, "CSI%d_CCIR_CODE_3 = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_CCIR_CODE_3));
+	dev_dbg(ipu->dev, "CSI%d_MIPI_DI = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_MIPI_DI));
+	dev_dbg(ipu->dev, "CSI%d_SKIP = \t0x%08X\n", csi,
+		ipu_csi_read(ipu, csi , CSI_SKIP));
 }
 
 /*!

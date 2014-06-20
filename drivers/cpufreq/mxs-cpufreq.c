@@ -36,7 +36,7 @@
 #include <linux/of_address.h>
 #include <linux/slab.h>
 #include <linux/clk-provider.h>
-
+#include <linux/busfreq-imx6.h>
 
 #define BF(value, field) (((value) << BP_##field) & BM_##field)
 #define BP_DIGCTL_ARMCACHE_VALID_SS     16
@@ -661,6 +661,12 @@ out_ahb:
 out_cpu:
         return ret;
 }
+
+void request_bus_freq(enum bus_freq_mode mode) {}
+EXPORT_SYMBOL(request_bus_freq);
+
+void release_bus_freq(enum bus_freq_mode mode) {}
+EXPORT_SYMBOL(release_bus_freq);
 
 static struct cpufreq_driver mxs_cpufreq_driver = {
 	.flags		= CPUFREQ_STICKY,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Freescale Semiconductor, Inc.
+ * Copyright 2011-2014 Freescale Semiconductor, Inc.
  * Copyright 2011 Linaro Ltd.
  *
  * The code contained herein is licensed under the GNU General Public
@@ -232,46 +232,6 @@ static void __init imx6q_csi_mux_init(void)
 	}
 }
 
-/*
- * Disable Hannstar LVDS panel CABC function.
- * This function turns the panel's backlight density automatically
- * according to the content shown on the panel which may cause
- * annoying unstable backlight issue.
- */
-static void __init imx6q_lvds_cabc_init(void)
-{
-	struct device_node *np = NULL;
-	int ret, lvds0_gpio, lvds1_en_gpio,  lvds1_gpio;
-
-	np = of_find_node_by_name(NULL, "lvds_cabc_ctrl");
-	if (!np)
-		return;
-
-	lvds0_gpio = of_get_named_gpio(np, "lvds0-gpios", 0);
-	if (gpio_is_valid(lvds0_gpio)) {
-		ret = gpio_request_one(lvds0_gpio, GPIOF_OUT_INIT_HIGH,
-				"LVDS0 CABC enable");
-		if (ret)
-			pr_warn("failed to request LVDS0 CABC gpio\n");
-	}
-
-	lvds1_en_gpio = of_get_named_gpio(np, "lvds1-auxen-gpios", 0);
-	if (gpio_is_valid(lvds1_en_gpio)) {
-		ret = gpio_request_one(lvds1_en_gpio, GPIOF_OUT_INIT_HIGH,
-				"LVDS1 AUX enable");
-		if (ret)
-			pr_warn("failed to request LVDS1 AUX gpio\n");
-	}
-
-	lvds1_gpio = of_get_named_gpio(np, "lvds1-gpios", 0);
-	if (gpio_is_valid(lvds1_gpio)) {
-		ret = gpio_request_one(lvds1_gpio, GPIOF_OUT_INIT_LOW,
-				"LVDS1 CABC enable");
-		if (ret)
-			pr_warn("failed to request LVDS1 CABC gpio\n");
-	}
-}
-
 static void imx6q_wifi_init (void)
 {
 	struct device_node *np;
@@ -301,15 +261,32 @@ static void imx6q_wifi_init (void)
 static void imx6q_bt_init (void)
 {
 	struct device_node *np;
-	int pwrdown_gpio;
+	int pwrdown_gpio, disable_gpio;
 	enum of_gpio_flags flags;
 
 	np = of_find_node_by_path("/bluetooth");
 	if (!np)
 		return;
 
+	/* Read the disable gpio */
+	disable_gpio = of_get_named_gpio_flags(np, "digi,disable-gpios", 0,
+			&flags);
+	if (gpio_is_valid(disable_gpio)) {
+		if (!gpio_request_one(disable_gpio, GPIOF_DIR_OUT,
+			"bt_chip_dis_l")) {
+			/* Start with Power pin low, then set high to power  */
+			gpio_set_value_cansleep(disable_gpio, 1);
+			/*
+			* Free the chip PWD pin to allow controlling
+			* it from user space
+			*/
+			gpio_free(disable_gpio);
+		}
+	}
+
 	/* Read the power down gpio */
-	pwrdown_gpio = of_get_named_gpio_flags(np, "digi,pwrdown-gpios", 0, &flags);
+	pwrdown_gpio = of_get_named_gpio_flags(np, "digi,pwrdown-gpios", 0,
+			&flags);
 	if (gpio_is_valid(pwrdown_gpio)) {
 		if (!gpio_request_one(pwrdown_gpio, GPIOF_DIR_OUT,
 			"bt_chip_pwd_l")) {
@@ -387,8 +364,9 @@ static inline void imx6q_enet_init(void)
 {
 	imx6_enet_mac_init("fsl,imx6q-fec");
 	imx6q_enet_phy_init();
-	if (!of_machine_is_compatible("digi,ccimx6adpt"))
-		imx6q_1588_init();
+	if (!of_machine_is_compatible("digi,ccimx6adpt") &&
+		!of_machine_is_compatible("digi,ccimx6sbc"))
+			imx6q_1588_init();
 }
 
 /* Add auxdata to pass platform data */
@@ -414,7 +392,6 @@ static void __init imx6q_init_machine(void)
 	imx_anatop_init();
 	imx6_pm_init();
 	imx6q_csi_mux_init();
-	imx6q_lvds_cabc_init();
 }
 
 #define OCOTP_CFG3			0x440
@@ -493,6 +470,28 @@ put_node:
 	of_node_put(np);
 }
 
+#define ESAI_AUDIO_MCLK 24576000
+
+static void __init imx6q_audio_lvds2_init(void)
+{
+	struct clk *pll4_sel, *lvds2_in, *pll4_audio_div, *esai;
+
+	pll4_audio_div = clk_get_sys(NULL, "pll4_audio_div");
+	pll4_sel = clk_get_sys(NULL, "pll4_sel");
+	lvds2_in = clk_get_sys(NULL, "lvds2_in");
+	esai = clk_get_sys(NULL, "esai");
+	if (IS_ERR(pll4_audio_div) || IS_ERR(pll4_sel) ||
+	    IS_ERR(lvds2_in) || IS_ERR(esai))
+		return;
+
+	if (clk_get_rate(lvds2_in) != ESAI_AUDIO_MCLK)
+		return;
+
+	clk_set_parent(pll4_sel, lvds2_in);
+	clk_set_rate(pll4_audio_div, 786432000);
+	clk_set_rate(esai, ESAI_AUDIO_MCLK);
+}
+
 static struct platform_device imx6q_cpufreq_pdev = {
 	.name = "imx6-cpufreq",
 };
@@ -529,8 +528,10 @@ static void __init imx6q_init_late(void)
 	imx6q_bt_init();
 
 	if (of_machine_is_compatible("fsl,imx6q-sabreauto")
-		|| of_machine_is_compatible("fsl,imx6dl-sabreauto"))
+		|| of_machine_is_compatible("fsl,imx6dl-sabreauto")){
 		imx6q_flexcan_fixup_auto();
+		imx6q_audio_lvds2_init();
+	}
 }
 
 static void __init imx6q_map_io(void)

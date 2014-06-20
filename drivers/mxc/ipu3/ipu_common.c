@@ -465,12 +465,6 @@ static int ipu_probe(struct platform_device *pdev)
 	}
 
 	ipu->online = true;
-	ret = ipu_clk_setup_enable(ipu, pltfm_data);
-	if (ret < 0) {
-		dev_err(ipu->dev, "ipu clk setup failed\n");
-		ipu->online = false;
-		return ret;
-	}
 
 	platform_set_drvdata(pdev, ipu);
 
@@ -490,8 +484,16 @@ static int ipu_probe(struct platform_device *pdev)
 			     IPU_DISP_GEN);
 	}
 
-	/* Set sync refresh channels and CSI->mem channel as high priority */
-	ipu_idmac_write(ipu, 0x18800001L, IDMAC_CHA_PRI(0));
+	/* setup ipu clk tree after ipu reset  */
+	ret = ipu_clk_setup_enable(ipu, pltfm_data);
+	if (ret < 0) {
+		dev_err(ipu->dev, "ipu clk setup failed\n");
+		ipu->online = false;
+		return ret;
+	}
+
+	/* Set sync refresh channels and CSI->mem channels as high priority */
+	ipu_idmac_write(ipu, 0x18800003L, IDMAC_CHA_PRI(0));
 
 	/* Enable error interrupts by default */
 	ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(5));
@@ -801,7 +803,6 @@ int32_t ipu_init_channel(struct ipu_soc *ipu, ipu_channel_t channel, ipu_channel
 		ipu->using_ic_dirct_ch = MEM_VDI_MEM;
 		ipu->ic_use_count++;
 		ipu->vdi_use_count++;
-		_ipu_ic_init_prpvf(ipu, params, false);
 		_ipu_vdi_init(ipu, channel, params);
 		break;
 	case MEM_ROT_VF_MEM:
@@ -1042,7 +1043,6 @@ void ipu_uninit_channel(struct ipu_soc *ipu, ipu_channel_t channel)
 		ipu->vdi_use_count--;
 		if (ipu->using_ic_dirct_ch == MEM_VDI_MEM)
 			ipu->using_ic_dirct_ch = 0;
-		_ipu_ic_uninit_prpvf(ipu);
 		_ipu_vdi_uninit(ipu);
 		break;
 	case MEM_VDI_PRP_VF_MEM_P:
@@ -3071,7 +3071,7 @@ static int ipu_resume(struct device *dev)
 		_ipu_get(ipu);
 		_ipu_dmfc_init(ipu, dmfc_type_setup, 1);
 		/* Set sync refresh channels as high priority */
-		ipu_idmac_write(ipu, 0x18800001L, IDMAC_CHA_PRI(0));
+		ipu_idmac_write(ipu, 0x18800003L, IDMAC_CHA_PRI(0));
 		_ipu_put(ipu);
 	}
 	dev_dbg(dev, "ipu resume.\n");

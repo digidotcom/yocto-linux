@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2004-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -34,6 +34,7 @@
 #include <linux/fb.h>
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
+#include <linux/mutex.h>
 #include <linux/mxcfb.h>
 #include <linux/of_device.h>
 #include <media/v4l2-chip-ident.h>
@@ -451,16 +452,16 @@ static int mxc_streamon(cam_data *cam)
 		list_del(cam->ready_q.next);
 		list_add_tail(&frame->queue, &cam->working_q);
 		frame->ipu_buf_num = cam->ping_pong_csi;
-		err = cam->enc_update_eba(cam->ipu, frame->buffer.m.offset,
-					  &cam->ping_pong_csi);
+		err = cam->enc_update_eba(cam->ipu, cam->csi,
+			frame->buffer.m.offset, &cam->ping_pong_csi);
 
 		frame =
 		    list_entry(cam->ready_q.next, struct mxc_v4l_frame, queue);
 		list_del(cam->ready_q.next);
 		list_add_tail(&frame->queue, &cam->working_q);
 		frame->ipu_buf_num = cam->ping_pong_csi;
-		err |= cam->enc_update_eba(cam->ipu, frame->buffer.m.offset,
-					   &cam->ping_pong_csi);
+		err |= cam->enc_update_eba(cam->ipu, cam->csi,
+			 frame->buffer.m.offset, &cam->ping_pong_csi);
 		spin_unlock_irqrestore(&cam->queue_int_lock, lock_flags);
 	} else {
 		spin_unlock_irqrestore(&cam->queue_int_lock, lock_flags);
@@ -1354,19 +1355,11 @@ static int mxc_v4l2_s_param(cam_data *cam, struct v4l2_streamparm *parm)
 	csi_param.csi = cam->csi;
 	csi_param.mclk = 0;
 
-	/*This may not work on other platforms. Check when adding a new one.*/
-	/*The mclk clock was never set correclty in the ipu register*/
-	/*for now we are going to use this mclk as pixel clock*/
-	/*to set csi0_data_dest register.*/
-	/*This is a workaround which should be fixed*/
 	pr_debug("   clock_curr=mclk=%d\n", ifparm.u.bt656.clock_curr);
-	if (ifparm.u.bt656.clock_curr == 0) {
+	if (ifparm.u.bt656.clock_curr == 0)
 		csi_param.clk_mode = IPU_CSI_CLK_MODE_CCIR656_INTERLACED;
-		/*protocol bt656 use 27Mhz pixel clock */
-		csi_param.mclk = 27000000;
-	} else {
+	else
 		csi_param.clk_mode = IPU_CSI_CLK_MODE_GATED_CLK;
-	}
 
 	csi_param.pixclk_pol = ifparm.u.bt656.latch_clk_inv;
 
@@ -1436,7 +1429,8 @@ exit:
  */
 static int mxc_v4l2_s_std(cam_data *cam, v4l2_std_id e)
 {
-	printk(KERN_ERR "In mxc_v4l2_s_std %Lx\n", e);
+	pr_debug("In mxc_v4l2_s_std %Lx\n", e);
+
 	if (e == V4L2_STD_PAL) {
 		pr_debug("   Setting standard to PAL %Lx\n", V4L2_STD_PAL);
 		cam->standard.id = V4L2_STD_PAL;
@@ -2582,7 +2576,7 @@ next:
 					 struct mxc_v4l_frame,
 					 queue);
 		if (cam->enc_update_eba)
-			if (cam->enc_update_eba(cam->ipu,
+			if (cam->enc_update_eba(cam->ipu, cam->csi,
 						ready_frame->buffer.m.offset,
 						&cam->ping_pong_csi) == 0) {
 				list_del(cam->ready_q.next);
@@ -2593,7 +2587,8 @@ next:
 	} else {
 		if (cam->enc_update_eba)
 			cam->enc_update_eba(
-				cam->ipu, cam->dummy_frame.buffer.m.offset,
+				cam->ipu, cam->csi,
+				cam->dummy_frame.buffer.m.offset,
 				&cam->ping_pong_csi);
 	}
 
@@ -2618,6 +2613,7 @@ static int init_camera_struct(cam_data *cam, struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 	int ipu_id, csi_id, mclk_source;
 	int ret = 0;
+	static int camera_id;
 
 	pr_debug("In MVC: init_camera_struct\n");
 
@@ -2722,7 +2718,7 @@ static int init_camera_struct(cam_data *cam, struct platform_device *pdev)
 
 	cam->self = kmalloc(sizeof(struct v4l2_int_device), GFP_KERNEL);
 	cam->self->module = THIS_MODULE;
-	sprintf(cam->self->name, "mxc_v4l2_cap%d", cam->csi);
+	sprintf(cam->self->name, "mxc_v4l2_cap%d", camera_id++);
 	cam->self->type = v4l2_int_type_master;
 	cam->self->u.master = &mxc_v4l2_master;
 
@@ -2980,6 +2976,11 @@ static int mxc_v4l2_master_attach(struct v4l2_int_device *slave)
 		return -1;
 	}
 
+	if (sdata->ipu_id != cam->ipu_id) {
+		pr_debug("%s: ipu doesn't match\n", __func__);
+		return -1;
+	}
+
 	if (sdata->csi != cam->csi) {
 		pr_debug("%s: csi doesn't match\n", __func__);
 		return -1;
@@ -3066,6 +3067,20 @@ static void mxc_v4l2_master_detach(struct v4l2_int_device *slave)
 	cam->sensor_index--;
 	vidioc_int_dev_exit(slave);
 }
+
+DEFINE_MUTEX(camera_common_mutex);
+
+void mxc_camera_common_lock(void)
+{
+	mutex_lock(&camera_common_mutex);
+}
+EXPORT_SYMBOL(mxc_camera_common_lock);
+
+void mxc_camera_common_unlock(void)
+{
+	mutex_unlock(&camera_common_mutex);
+}
+EXPORT_SYMBOL(mxc_camera_common_unlock);
 
 /*!
  * Entry point for the V4L2

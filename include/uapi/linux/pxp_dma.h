@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2013-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,12 +20,12 @@
 #define _UAPI_PXP_DMA
 
 #include <linux/posix_types.h>
+#include <linux/types.h>
 
 #ifndef __KERNEL__
 typedef unsigned long dma_addr_t;
 typedef unsigned char bool;
 #endif
-#define __u32 unsigned int
 
 /*  PXP Pixel format definitions */
 /*  Four-character-code (FOURCC) */
@@ -88,16 +88,6 @@ typedef unsigned char bool;
 #define PXP_LUT_USE_CMAP		0x4
 
 #define NR_PXP_VIRT_CHANNEL	16
-
-#define PXP_IOC_MAGIC  'P'
-
-#define PXP_IOC_GET_CHAN      _IOR(PXP_IOC_MAGIC, 0, struct pxp_mem_desc)
-#define PXP_IOC_PUT_CHAN      _IOW(PXP_IOC_MAGIC, 1, struct pxp_mem_desc)
-#define PXP_IOC_CONFIG_CHAN   _IOW(PXP_IOC_MAGIC, 2, struct pxp_mem_desc)
-#define PXP_IOC_START_CHAN    _IOW(PXP_IOC_MAGIC, 3, struct pxp_mem_desc)
-#define PXP_IOC_GET_PHYMEM    _IOWR(PXP_IOC_MAGIC, 4, struct pxp_mem_desc)
-#define PXP_IOC_PUT_PHYMEM    _IOW(PXP_IOC_MAGIC, 5, struct pxp_mem_desc)
-#define PXP_IOC_WAIT4CMPLT    _IOWR(PXP_IOC_MAGIC, 6, struct pxp_mem_desc)
 
 /* Order significant! */
 enum pxp_channel_status {
@@ -176,14 +166,8 @@ struct pxp_config_data {
 	int layer_nr;
 
 	/* Users don't touch */
-	int chan_id;
+	int handle;
 };
 
-struct pxp_mem_desc {
-	unsigned int size;
-	dma_addr_t phys_addr;
-	unsigned int cpu_addr;		/* cpu address to free the dma mem */
-	unsigned int virt_uaddr;		/* virtual user space address */
-};
 
 #endif

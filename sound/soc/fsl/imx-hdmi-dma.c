@@ -1,7 +1,7 @@
 /*
  * imx-hdmi-dma.c  --  HDMI DMA driver for ALSA Soc Audio Layer
  *
- * Copyright (C) 2011-2013 Freescale Semiconductor, Inc.
+ * Copyright (C) 2011-2014 Freescale Semiconductor, Inc.
  *
  * based on imx-pcm-dma-mx2.c
  * Copyright 2009 Sascha Hauer <s.hauer@pengutronix.de>
@@ -79,6 +79,17 @@ struct hdmi_dma_priv {
 /* max 8 channels supported; channels are interleaved */
 static u8 g_packet_head_table[48 * 8];
 
+void hdmi_dma_copy_16_neon_lut(unsigned short *src, unsigned int *dst,
+		int samples, unsigned char *lookup_table);
+void hdmi_dma_copy_16_neon_fast(unsigned short *src, unsigned int *dst,
+		int samples);
+void hdmi_dma_copy_24_neon_lut(unsigned int *src, unsigned int *dst,
+		int samples, unsigned char *lookup_table);
+void hdmi_dma_copy_24_neon_fast(unsigned int *src, unsigned int *dst,
+		int samples);
+static void hdmi_dma_irq_enable(struct hdmi_dma_priv *priv);
+static void hdmi_dma_irq_disable(struct hdmi_dma_priv *priv);
+
 union hdmi_audio_header_t iec_header;
 EXPORT_SYMBOL(iec_header);
 
@@ -121,9 +132,9 @@ EXPORT_SYMBOL(iec_header);
  *    transmitted in a period, it can be continued in the next period.  This
  *    is necessary for 6 ch.
  */
-#define HDMI_DMA_PERIOD_BYTES		(6144)
-#define HDMI_DMA_BUF_SIZE		(64 * 1024)
-#define HDMI_PCM_BUF_SIZE		(64 * 1024)
+#define HDMI_DMA_PERIOD_BYTES		(12288)
+#define HDMI_DMA_BUF_SIZE		(128 * 1024)
+#define HDMI_PCM_BUF_SIZE		(128 * 1024)
 
 #define hdmi_audio_debug(dev, reg) \
 	dev_dbg(dev, #reg ": 0x%02x\n", hdmi_readb(reg))
@@ -275,6 +286,7 @@ static void init_table(int channels)
 	}
 }
 
+#ifdef HDMI_DMA_NO_NEON
 /* Optimization for IEC head */
 static void hdmi_dma_copy_16_c_lut(u16 *src, u32 *dst, int samples,
 				u8 *lookup_table)
@@ -356,6 +368,45 @@ static void hdmi_dma_copy_16(u16 *src, u32 *dst, int framecnt, int channelcnt)
 		dst += samples;
 	}
 }
+#else
+/* NEON optimization for IEC head*/
+
+/**
+ * Convert pcm samples to iec samples suitable for HDMI transfer.
+ * PCM sample is 16 bits length.
+ * Frame index always starts from 0.
+ * Channel count can be 1, 2, 4, 6, or 8
+ * Sample count (frame_count * channel_count) is multipliable by 8.
+ */
+static void hdmi_dma_copy_16(u16 *src, u32 *dst, int framecount, int channelcount)
+{
+	/* split input frames into 192-frame each */
+	int i, count_in_192 = (framecount + 191) / 192;
+
+	for (i = 0; i < count_in_192; i++) {
+		int count, samples;
+
+		/* handles frame index [0, 48) */
+		count = (framecount < 48) ? framecount : 48;
+		samples = count * channelcount;
+		hdmi_dma_copy_16_neon_lut(src, dst, samples, g_packet_head_table);
+		framecount -= count;
+		if (framecount == 0)
+			break;
+
+		src += samples;
+		dst += samples;
+
+		/* handles frame index [48, 192) */
+		count = (framecount < 192 - 48) ? framecount : (192 - 48);
+		samples = count * channelcount;
+		hdmi_dma_copy_16_neon_fast(src, dst, samples);
+		framecount -= count;
+		src += samples;
+		dst += samples;
+	}
+}
+#endif
 
 static void hdmi_dma_mmap_copy(struct snd_pcm_substream *substream,
 				int offset, int count)
@@ -786,6 +837,7 @@ static void hdmi_dma_trigger_init(struct snd_pcm_substream *substream,
 {
 	unsigned long status;
 
+	priv->offset = 0;
 	priv->frame_idx = 0;
 
 	/* Copy data by buffer_bytes */
@@ -1062,6 +1114,15 @@ static int imx_soc_platform_probe(struct platform_device *pdev)
 	hdmi_dma_init_iec_header();
 
 	dev_set_drvdata(&pdev->dev, priv);
+
+	switch (hdmi_readb(HDMI_REVISION_ID)) {
+	case 0x0a:
+		snd_imx_hardware.period_bytes_max = HDMI_DMA_PERIOD_BYTES / 4;
+		snd_imx_hardware.period_bytes_min = HDMI_DMA_PERIOD_BYTES / 4;
+		break;
+	default:
+		break;
+	}
 
 	ret = snd_soc_register_platform(&pdev->dev, &imx_hdmi_platform);
 	if (ret)

@@ -90,6 +90,16 @@
 		compatible = "fsl,imx6-dummy-pureg"; /* only used in ldo-bypass */
 	};
 
+	reg_vbus_wakeup: usb_vbus_wakeup {
+		compatible = "fsl,imx6-dummy-ldo2p5";
+	};
+
+	mxs_viim {
+		compatible = "fsl,mxs_viim";
+		reg = <0x02098000 0x1000>, /* GPT base */
+		      <0x021bc000 0x1000>; /* OCOTP base */
+	};
+
 	soc {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -564,6 +574,12 @@
 				fsl,anatop = <&anatop>;
 			};
 
+			usbphy_nop1: usbphy_nop1 {
+				compatible = "usb-nop-xceiv";
+				clocks = <&clks IMX6SL_CLK_USBPHY1>;
+				clock-names = "main_clk";
+			};
+
 			snvs@020cc000 {
 				compatible = "fsl,sec-v4.0-mon", "simple-bus";
 				#address-cells = <1>;
@@ -594,9 +610,9 @@
 				#reset-cells = <1>;
 			};
 
-			ocram: sram@00900000 {
+			ocram: sram@00904000 {
 				compatible = "mmio-sram";
-				reg = <0x00900000 0x20000>;
+				reg = <0x00904000 0x1C000>;
 				clocks = <&clks IMX6SL_CLK_OCRAM>;
 			};
 
@@ -716,6 +732,9 @@
 				interrupts = <0 40 0x04>;
 				clocks = <&clks IMX6SL_CLK_USBOH3>;
 				fsl,usbmisc = <&usbmisc 2>;
+				phy_type = "hsic";
+				fsl,usbphy = <&usbphy_nop1>;
+				fsl,anatop = <&anatop>;
 				status = "disabled";
 			};
 
@@ -724,6 +743,7 @@
 				compatible = "fsl,imx6sl-usbmisc", "fsl,imx6q-usbmisc";
 				reg = <0x02184800 0x200>;
 				clocks = <&clks IMX6SL_CLK_USBOH3>;
+				vbus-wakeup-supply = <&reg_vbus_wakeup>;
 			};
 
 			fec: ethernet@02188000 {
@@ -819,9 +839,11 @@
 				reg = <0x021b0000 0x4000>;
 			};
 
-			rngb: rngb@021b4000 {
+			rng: rng@021b4000 {
+				compatible = "fsl,imx6sl-rng", "fsl,imx-rng", "imx-rng";
 				reg = <0x021b4000 0x4000>;
 				interrupts = <0 5 0x04>;
+				clocks = <&clks IMX6SL_CLK_DUMMY>;
 			};
 
 			weim: weim@021b8000 {

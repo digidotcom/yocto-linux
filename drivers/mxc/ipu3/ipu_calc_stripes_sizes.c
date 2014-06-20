@@ -1,5 +1,5 @@
 /*
- * Copyright 2009-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2009-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -295,7 +295,8 @@ int ipu_calc_stripes_sizes(const unsigned int input_frame_width,
 	    || ((((u64)output_frame_width) << 32) <
 		(2 * ((((u64)output_f) << 32) + (input_f * rr_opt))))
 	    || (maximal_stripe_width < output_f)
-	    || (output_frame_width <= maximal_stripe_width)
+	    || ((output_frame_width <= maximal_stripe_width)
+		&& (equal_stripes == 0))
 	    || ((2 * maximal_stripe_width) < output_frame_width))
 		return 1;
 
@@ -387,8 +388,11 @@ int ipu_calc_stripes_sizes(const unsigned int input_frame_width,
 						     &resize_coeff,
 						     &downsize_coeff) < 0)
 				return -EINVAL;
-			left->irr = right->irr =
-				(downsize_coeff << 14) | resize_coeff;
+
+			if (downsize_coeff > 0) {
+				left->irr = right->irr =
+					(downsize_coeff << 14) | resize_coeff;
+			}
 		}
 		pr_debug("inw %d, onw %d, ilw %d, ilc %d, olw %d,"
 			 " irw %d, irc %d, orw %d, orc %d, "

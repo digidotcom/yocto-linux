@@ -143,6 +143,9 @@ typedef enum _gceDATABASE_TYPE
     gcvDB_SHARED_INFO,                  /* Private data */
     gcvDB_MAP_USER_MEMORY,              /* Map user memory */
     gcvDB_SYNC_POINT,                   /* Sync point. */
+    gcvDB_VIDEO_MEMORY_RESERVED,        /* Reserved video memory */
+    gcvDB_VIDEO_MEMORY_CONTIGUOUS,      /* Contiguous video memory */
+    gcvDB_VIDEO_MEMORY_VIRTUAL,         /* Virtual video memory */
 }
 gceDATABASE_TYPE;
 
@@ -181,6 +184,9 @@ typedef struct _gcsDATABASE
     gcsDATABASE_COUNTERS                contiguous;
     gcsDATABASE_COUNTERS                mapUserMemory;
     gcsDATABASE_COUNTERS                mapMemory;
+    gcsDATABASE_COUNTERS                vidMemResv;
+    gcsDATABASE_COUNTERS                vidMemCont;
+    gcsDATABASE_COUNTERS                vidMemVirt;
 
     /* Idle time management. */
     gctUINT64                           lastIdle;
@@ -728,6 +734,9 @@ typedef union _gcuVIDMEM_NODE
 #if gcdDYNAMIC_MAP_RESERVED_MEMORY && gcdENABLE_VG
         gctPOINTER              kernelVirtual;
 #endif
+
+        /* Surface type. */
+        gceSURF_TYPE            type;
     }
     VidMem;
 
@@ -784,6 +793,9 @@ typedef union _gcuVIDMEM_NODE
 
         /* */
         gcsVIDMEM_NODE_SHARED_INFO sharedInfo;
+
+        /* Surface type. */
+        gceSURF_TYPE            type;
     }
     Virtual;
 }

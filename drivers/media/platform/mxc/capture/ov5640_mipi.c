@@ -27,9 +27,12 @@
 #include <linux/clk.h>
 #include <linux/of_device.h>
 #include <linux/i2c.h>
+#include <linux/mfd/syscon.h>
+#include <linux/mfd/syscon/imx6q-iomuxc-gpr.h>
 #include <linux/of_gpio.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
+#include <linux/regmap.h>
 #include <linux/fsl_devices.h>
 #include <linux/mipi_csi2.h>
 #include <media/v4l2-chip-ident.h>
@@ -674,8 +677,35 @@ static struct i2c_driver ov5640_i2c_driver = {
 	.id_table = ov5640_id,
 };
 
+static s32 update_device_addr(struct sensor_data *sensor)
+{
+	int ret;
+	u8 buf[4];
+	unsigned reg = 0x3100;
+	unsigned default_addr = 0x3c;
+	struct i2c_msg msg;
+
+	if (sensor->i2c_client->addr == default_addr)
+		return 0;
+
+	buf[0] = reg >> 8;
+	buf[1] = reg & 0xff;
+	buf[2] = sensor->i2c_client->addr << 1;
+	msg.addr = default_addr;
+	msg.flags = 0;
+	msg.len = 3;
+	msg.buf = buf;
+
+
+	ret = i2c_transfer(sensor->i2c_client->adapter, &msg, 1);
+	return ret;
+}
+
 static void ov5640_standby(s32 enable)
 {
+	if (!gpio_is_valid(pwn_gpio))
+		return;
+
 	if (enable)
 		gpio_set_value(pwn_gpio, 1);
 	else
@@ -686,23 +716,30 @@ static void ov5640_standby(s32 enable)
 
 static void ov5640_reset(void)
 {
-	/* camera reset */
-	gpio_set_value(rst_gpio, 1);
+	mxc_camera_common_lock();
 
-	/* camera power dowmn */
-	gpio_set_value(pwn_gpio, 1);
-	msleep(5);
+	if (gpio_is_valid(rst_gpio))
+		gpio_set_value(rst_gpio, 1);
 
-	gpio_set_value(pwn_gpio, 0);
-	msleep(5);
+	if (gpio_is_valid(pwn_gpio)) {
+		gpio_set_value(pwn_gpio, 1);
+		msleep(5);
+		gpio_set_value(pwn_gpio, 0);
+		msleep(5);
+	}
 
-	gpio_set_value(rst_gpio, 0);
-	msleep(1);
+	if (gpio_is_valid(rst_gpio)) {
+		gpio_set_value(rst_gpio, 0);
+		msleep(1);
+		gpio_set_value(rst_gpio, 1);
+		msleep(20);
+	}
 
-	gpio_set_value(rst_gpio, 1);
-	msleep(5);
+	update_device_addr(&ov5640_data);
+	mxc_camera_common_unlock();
 
-	gpio_set_value(pwn_gpio, 1);
+	if (gpio_is_valid(pwn_gpio))
+		gpio_set_value(pwn_gpio, 1);
 }
 
 static int ov5640_power_on(struct device *dev)
@@ -723,7 +760,8 @@ static int ov5640_power_on(struct device *dev)
 				"%s:io set voltage ok\n", __func__);
 		}
 	} else {
-		pr_err("%s: cannot get io voltage error\n", __func__);
+		pr_warn("%s: cannot get io voltage error, assuming powered\n",
+			 __func__);
 		io_regulator = NULL;
 	}
 
@@ -742,7 +780,8 @@ static int ov5640_power_on(struct device *dev)
 		}
 	} else {
 		core_regulator = NULL;
-		pr_err("%s: cannot get core voltage error\n", __func__);
+		pr_warn("%s: cannot get core voltage error, assuming powered\n",
+			 __func__);
 	}
 
 	analog_regulator = devm_regulator_get(dev, "AVDD");
@@ -761,7 +800,8 @@ static int ov5640_power_on(struct device *dev)
 		}
 	} else {
 		analog_regulator = NULL;
-		pr_err("%s: cannot get analog voltage error\n", __func__);
+		pr_warn("%s: cannot get analog voltage error, assuming powered\n",
+				__func__);
 	}
 
 	return ret;
@@ -1091,6 +1131,7 @@ static void ov5640_set_virtual_channel(int channel)
 	ov5640_read_reg(0x4814, &channel_id);
 	channel_id &= ~(3 << 6);
 	ov5640_write_reg(0x4814, channel_id | (channel << 6));
+	pr_info("%s: virtual channel=%d\n", __func__, channel);
 }
 
 /* download ov5640 settings to sensor through i2c */
@@ -1382,7 +1423,7 @@ static int ov5640_init_mode(enum ov5640_frame_rate frame_rate,
 	OV5640_set_AE_target(AE_Target);
 	OV5640_get_light_freq();
 	OV5640_set_bandingfilter();
-	ov5640_set_virtual_channel(ov5640_data.csi);
+	ov5640_set_virtual_channel(ov5640_data.csi | (ov5640_data.ipu_id << 1));
 
 	/* add delay to wait for sensor stable */
 	if (mode == ov5640_mode_QSXGA_2592_1944) {
@@ -1924,7 +1965,7 @@ static struct v4l2_int_slave ov5640_slave = {
 
 static struct v4l2_int_device ov5640_int_device = {
 	.module = THIS_MODULE,
-	.name = "ov5640",
+	.name = "ov5640_mipi",
 	.type = v4l2_int_type_slave,
 	.u = {
 		.slave = &ov5640_slave,
@@ -1941,30 +1982,58 @@ static int ov5640_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct device *dev = &client->dev;
-	int retval;
+	int retval, i, n_alt_pwn_gpios;
 	u8 chip_id_high, chip_id_low;
+	struct regmap *gpr;
+	int *alt_pwn_gpios = NULL;
 
 	/* request power down pin */
 	pwn_gpio = of_get_named_gpio(dev->of_node, "pwn-gpios", 0);
 	if (!gpio_is_valid(pwn_gpio)) {
 		dev_warn(dev, "no sensor pwdn pin available");
-		return -EINVAL;
+	} else {
+		retval = devm_gpio_request_one(dev, pwn_gpio,
+			GPIOF_OUT_INIT_HIGH, "ov5640_mipi_pwdn");
+		if (retval < 0)
+			return retval;
 	}
-	retval = devm_gpio_request_one(dev, pwn_gpio, GPIOF_OUT_INIT_HIGH,
-					"ov5640_mipi_pwdn");
-	if (retval < 0)
-		return retval;
+
+	n_alt_pwn_gpios = of_gpio_named_count(dev->of_node,
+		"digi,alt-pwn-gpios");
+	if (n_alt_pwn_gpios) {
+		alt_pwn_gpios =
+			kmalloc(sizeof(*alt_pwn_gpios) * n_alt_pwn_gpios,
+				GFP_KERNEL);
+		if (!alt_pwn_gpios)
+			return -ENOMEM;
+
+		for (i = 0; i < n_alt_pwn_gpios; i++) {
+			alt_pwn_gpios[i] = of_get_named_gpio(dev->of_node,
+				"digi,alt-pwn-gpios", i);
+			if (gpio_is_valid(alt_pwn_gpios[i])) {
+				/* Keep the alternative power pin down to
+				 * disable the alternative camera with the same
+				 * default slave address*/
+				retval = devm_gpio_request_one(dev,
+					alt_pwn_gpios[i],
+					GPIOF_OUT_INIT_HIGH,
+					"ov5640_mipi_alt_pwdn");
+				if (retval < 0)
+					return retval;
+			}
+		}
+	}
 
 	/* request reset pin */
 	rst_gpio = of_get_named_gpio(dev->of_node, "rst-gpios", 0);
 	if (!gpio_is_valid(rst_gpio)) {
 		dev_warn(dev, "no sensor reset pin available");
-		return -EINVAL;
+	} else {
+		retval = devm_gpio_request_one(dev, rst_gpio,
+			GPIOF_OUT_INIT_HIGH, "ov5640_mipi_reset");
+		if (retval < 0)
+			return retval;
 	}
-	retval = devm_gpio_request_one(dev, rst_gpio, GPIOF_OUT_INIT_HIGH,
-					"ov5640_mipi_reset");
-	if (retval < 0)
-		return retval;
 
 	/* Set initial values for the sensor struct. */
 	memset(&ov5640_data, 0, sizeof(ov5640_data));
@@ -1987,6 +2056,13 @@ static int ov5640_probe(struct i2c_client *client,
 					(u32 *) &(ov5640_data.mclk_source));
 	if (retval) {
 		dev_err(dev, "mclk_source missing or invalid\n");
+		return retval;
+	}
+
+	retval = of_property_read_u32(dev->of_node, "ipu_id",
+					&(ov5640_data.ipu_id));
+	if (retval) {
+		dev_err(dev, "ipu_id missing or invalid\n");
 		return retval;
 	}
 
@@ -2014,6 +2090,24 @@ static int ov5640_probe(struct i2c_client *client,
 
 	ov5640_reset();
 
+	gpr = syscon_regmap_lookup_by_compatible("fsl,imx6q-iomuxc-gpr");
+	if (!IS_ERR(gpr)) {
+		if (of_machine_is_compatible("fsl,imx6q")) {
+			int mask = ov5640_data.ipu_id ? (1 << 20) : (1 << 19);
+			/* Set the CSI0/MIPI mux to MIPI */
+			if (ov5640_data.csi == 0)
+				regmap_update_bits(gpr, IOMUXC_GPR1, mask, 0);
+		}  else if (of_machine_is_compatible("fsl,imx6dl")) {
+			int mask = ov5640_data.csi ? (7 << 3) : (7 << 0);
+			int val =  ov5640_data.csi ? (3 << 3) : (0 << 0);
+
+			regmap_update_bits(gpr, IOMUXC_GPR13, mask, val);
+		}
+	} else {
+		pr_err("%s: failed to find fsl,imx6q-iomux-gpr regmap\n",
+		       __func__);
+	}
+
 	ov5640_standby(0);
 
 	retval = ov5640_read_reg(OV5640_CHIP_ID_HIGH_BYTE, &chip_id_high);
@@ -2035,6 +2129,12 @@ static int ov5640_probe(struct i2c_client *client,
 	retval = v4l2_int_device_register(&ov5640_int_device);
 
 	clk_disable_unprepare(ov5640_data.sensor_clk);
+
+	for (i = 0; i < n_alt_pwn_gpios; i++) {
+		if (gpio_is_valid(alt_pwn_gpios[i]))
+			devm_gpio_free(dev, alt_pwn_gpios[i]);
+	}
+	kfree(alt_pwn_gpios);
 
 	pr_info("camera ov5640_mipi is found\n");
 	return retval;

@@ -128,7 +128,7 @@ static irqreturn_t da9063_onkey_irq_handler(int irq, void *data)
 		schedule_delayed_work(&onkey->work, 0);
 	}
 	else {
-		dev_notice(&onkey->input->dev, "KEY_SLEEP pressed.\n");
+		dev_dbg(&onkey->input->dev, "KEY_SLEEP pressed.\n");
 		input_report_key(onkey->input, KEY_SLEEP, 1);
 		input_report_key(onkey->input, KEY_SLEEP, 0);
 		input_sync(onkey->input);
@@ -192,6 +192,8 @@ static int da9063_onkey_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to request IRQ.\n");
 		goto err_input;
 	}
+
+	enable_irq_wake(onkey->irq);
 
 	ret = input_register_device(onkey->input);
 	if (ret) {

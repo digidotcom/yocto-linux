@@ -37,6 +37,8 @@
 #include <linux/uaccess.h>
 #include <linux/of.h>
 
+static struct da9063 * da9063_data;
+
 static struct resource da9063_regulators_resources[] = {
 	{
 		.name	= "LDO_LIM",
@@ -381,6 +383,31 @@ int da9063_get_trim_data(struct da9063 *da9063)
 	return 0;
 }
 
+void da9063_power_off ( void ) {
+	BUG_ON(!da9063_data);
+
+	/* Configure LDO11 and BPERI not to follow sequencer */
+	da9063_reg_clear_bits(da9063_data, DA9063_REG_BPERI_CONT,
+			      DA9063_BUCK_CONF);
+	da9063_reg_clear_bits(da9063_data, DA9063_REG_LDO11_CONT,
+			      DA9063_LDO_CONF);
+
+	/* Configure to read OTP settings after power down */
+	da9063_reg_set_bits(da9063_data, DA9063_REG_CONTROL_C,
+			    DA9063_OTPREAD_EN);
+
+	/* Power down */
+	da9063_reg_clear_bits(da9063_data, DA9063_REG_CONTROL_A,
+			      DA9063_SYSTEM_EN);
+
+	if(!mutex_is_locked(&da9063_data->io_mutex))
+		mutex_lock(&da9063_data->io_mutex);
+
+	// Do not unlock mutex to avoid further accesses
+	// Do not return
+	while(1);
+}
+
 int da9063_device_init(struct da9063 *da9063, unsigned int irq)
 {
 	int ret = 0;
@@ -416,6 +443,10 @@ int da9063_device_init(struct da9063 *da9063, unsigned int irq)
 			da9063->irq_base, da9063->irq_domain);
 	if (ret)
 		dev_err(da9063->dev, "Cannot add MFD cells\n");
+
+	da9063_data = da9063;
+
+	pm_power_off = da9063_power_off;
 
 	dev_info(da9063->dev, "Device detected DA9063\n" );
 

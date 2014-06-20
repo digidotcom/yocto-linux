@@ -69,6 +69,12 @@
 		compatible = "fsl,imx6-dummy-pureg"; /* only used in ldo-bypass */
 	};
 
+	mxs_viim {
+		compatible = "fsl,mxs_viim";
+		reg = <0x02098000 0x1000>, /* GPT base */
+		      <0x021bc000 0x1000>; /* OCOTP base */
+	};
+
 	soc {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -373,8 +379,6 @@
 
 			flexcan1: can@02090000 {
 				compatible = "fsl,imx6q-flexcan";
-				pinctrl-names = "default";
-				pinctrl-0 = <&pinctrl_flexcan1_1>;
 				reg = <0x02090000 0x4000>;
 				interrupts = <0 110 0x04>;
 				clocks = <&clks 108>, <&clks 109>;
@@ -385,8 +389,6 @@
 
 			flexcan2: can@02094000 {
 				compatible = "fsl,imx6q-flexcan";
-				pinctrl-names = "default";
-				pinctrl-0 = <&pinctrl_flexcan2_1>;
 				reg = <0x02094000 0x4000>;
 				interrupts = <0 111 0x04>;
 				clocks = <&clks 110>, <&clks 111>;
@@ -622,6 +624,18 @@
 				fsl,anatop = <&anatop>;
 			};
 
+			usbphy_nop1: usbphy_nop1 {
+				compatible = "usb-nop-xceiv";
+				clocks = <&clks 182>;
+				clock-names = "main_clk";
+			};
+
+			usbphy_nop2: usbphy_nop2 {
+				compatible = "usb-nop-xceiv";
+				clocks = <&clks 182>;
+				clock-names = "main_clk";
+			};
+
 			caam_snvs: caam-snvs@020cc000 {
 				compatible = "fsl,imx6q-caam-snvs";
 				reg = <0x020cc000 0x4000>;
@@ -730,8 +744,8 @@
 				reg = <0x2100000 0x40000>;
 				ranges = <0 0x2100000 0x40000>;
 				interrupt-parent = <&intc>; /* interrupts = <0 92 0x4>; */
-				clocks = <&clks 213>, <&clks 214>, <&clks 215>;
-				clock-names = "caam_mem", "caam_aclk", "caam_ipg";
+				clocks = <&clks 213>, <&clks 214>, <&clks 215> ,<&clks 196>;
+				clock-names = "caam_mem", "caam_aclk", "caam_ipg", "caam_emi_slow";
 
 				sec_jr0: jr0@1000 {
 					compatible = "fsl,sec-v4.0-job-ring";
@@ -779,6 +793,9 @@
 				interrupts = <0 41 0x04>;
 				clocks = <&clks 162>;
 				fsl,usbmisc = <&usbmisc 2>;
+				phy_type = "hsic";
+				fsl,usbphy = <&usbphy_nop1>;
+				fsl,anatop = <&anatop>;
 				status = "disabled";
 			};
 
@@ -788,6 +805,9 @@
 				interrupts = <0 42 0x04>;
 				clocks = <&clks 162>;
 				fsl,usbmisc = <&usbmisc 3>;
+				phy_type = "hsic";
+				fsl,usbphy = <&usbphy_nop2>;
+				fsl,anatop = <&anatop>;
 				status = "disabled";
 			};
 
@@ -943,13 +963,13 @@
 				compatible = "fsl,imx6q-mipi-csi2";
 				reg = <0x021dc000 0x4000>;
 				interrupts = <0 100 0x04>, <0 101 0x04>;
-				clocks = <&clks 138>, <&clks 53>;
+				clocks = <&clks 138>, <&clks 53>, <&clks 204>;
 				/* Note: clks 138 is hsi_tx, however, the dphy_c
 				 * hsi_tx and pll_refclk use the same clk gate.
 				 * In current clk driver, open/close clk gate do
 				 * use hsi_tx for a temporary debug purpose.
 				 */
-				clock-names = "dphy_clk", "pixel_clk";
+				clock-names = "dphy_clk", "pixel_clk", "cfg_clk";
 				status = "disabled";
 			};
 
@@ -1053,6 +1073,12 @@
 	};
 
 	ecspi1 {
+		pinctrl_ecspi1_cs_1: ecspi1_cs_grp-1 {
+			fsl,pins = <
+				MX6QDL_PAD_EIM_D19__GPIO3_IO19 0x80000000
+			>;
+		};
+
 		pinctrl_ecspi1_1: ecspi1grp-1 {
 			fsl,pins = <
 				MX6QDL_PAD_EIM_D17__ECSPI1_MISO 0x100b1
@@ -1066,6 +1092,16 @@
 				MX6QDL_PAD_KEY_COL1__ECSPI1_MISO 0x100b1
 				MX6QDL_PAD_KEY_ROW0__ECSPI1_MOSI 0x100b1
 				MX6QDL_PAD_KEY_COL0__ECSPI1_SCLK 0x100b1
+			>;
+		};
+
+		pinctrl_ecspi1_3: ecspi1grp-3 {
+			fsl,pins = <
+				MX6QDL_PAD_EIM_D17__ECSPI1_MISO 0x100b1
+				MX6QDL_PAD_EIM_D18__ECSPI1_MOSI 0x100b1
+				MX6QDL_PAD_EIM_D16__ECSPI1_SCLK 0x100b1
+				MX6QDL_PAD_EIM_EB2__GPIO2_IO30  0x100b1
+				MX6QDL_PAD_KEY_COL2__GPIO4_IO10 0x100b1
 			>;
 		};
 	};
@@ -1235,6 +1271,13 @@
 				MX6QDL_PAD_GPIO_8__FLEXCAN1_RX 0x1b0b0
 			>;
 		};
+		pinctrl_flexcan1_2: flexcan1grp-2 {
+			fsl,pins = <
+				MX6QDL_PAD_GPIO_7__FLEXCAN1_TX 0x1b0b0
+				MX6QDL_PAD_GPIO_8__FLEXCAN1_RX 0x1b0b0
+				MX6QDL_PAD_GPIO_2__GPIO1_IO02  0x1b0b0
+			>;
+		};
 	};
 
 	flexcan2 {
@@ -1242,6 +1285,13 @@
 			fsl,pins = <
 				MX6QDL_PAD_SD3_DAT0__FLEXCAN2_TX 0x1b0b0
 				MX6QDL_PAD_SD3_DAT1__FLEXCAN2_RX 0x1b0b0
+			>;
+		};
+		pinctrl_flexcan2_2: flexcan2grp-2 {
+			fsl,pins = <
+				MX6QDL_PAD_SD3_DAT0__FLEXCAN2_TX 0x1b0b0
+				MX6QDL_PAD_SD3_DAT1__FLEXCAN2_RX 0x1b0b0
+				MX6QDL_PAD_GPIO_5__GPIO1_IO05    0x1b0b0
 			>;
 		};
 	};
@@ -1457,6 +1507,24 @@
 				MX6QDL_PAD_EIM_D29__IPU1_DI0_PIN14         0x80000000
 				>;
 		};
+
+		pinctrl_ipu1_5: ipu1grp-5 { /* parallel camera */
+			fsl,pins = <
+				MX6QDL_PAD_CSI0_DAT12__IPU1_CSI0_DATA12    0x80000000
+				MX6QDL_PAD_CSI0_DAT13__IPU1_CSI0_DATA13    0x80000000
+				MX6QDL_PAD_CSI0_DAT14__IPU1_CSI0_DATA14    0x80000000
+				MX6QDL_PAD_CSI0_DAT15__IPU1_CSI0_DATA15    0x80000000
+				MX6QDL_PAD_CSI0_DAT16__IPU1_CSI0_DATA16    0x80000000
+				MX6QDL_PAD_CSI0_DAT17__IPU1_CSI0_DATA17    0x80000000
+				MX6QDL_PAD_CSI0_DAT18__IPU1_CSI0_DATA18    0x80000000
+				MX6QDL_PAD_CSI0_DAT19__IPU1_CSI0_DATA19    0x80000000
+				MX6QDL_PAD_CSI0_PIXCLK__IPU1_CSI0_PIXCLK   0x0000a0b0
+				MX6QDL_PAD_CSI0_MCLK__IPU1_CSI0_HSYNC      0x80000000
+				MX6QDL_PAD_CSI0_VSYNC__IPU1_CSI0_VSYNC     0x80000000
+				MX6QDL_PAD_EIM_WAIT__GPIO5_IO00            0x80000000
+				MX6QDL_PAD_CSI0_DATA_EN__GPIO5_IO20	   0x80000000
+			>;
+		};
 	};
 
 	mlb {
@@ -1558,6 +1626,14 @@
 				MX6QDL_PAD_EIM_EB3__UART3_RTS_B   0x1b0b1
 			>;
 		};
+		pinctrl_uart3_2: uart3grp-2 {
+			fsl,pins = <
+				MX6QDL_PAD_EIM_D25__UART3_RX_DATA 0x1b0b1
+				MX6QDL_PAD_EIM_D24__UART3_TX_DATA 0x1b0b1
+				MX6QDL_PAD_EIM_D30__UART3_CTS_B   0x1b0b1
+				MX6QDL_PAD_EIM_D31__UART3_RTS_B   0x1b0b1
+			>;
+		};
 	};
 
 	uart4 {
@@ -1592,6 +1668,13 @@
 				MX6QDL_PAD_ENET_RX_ER__USB_OTG_ID 0x17059
 			>;
 		};
+		pinctrl_usbotg_3: usbotggrp-3 {
+			fsl,pins = <
+				MX6QDL_PAD_GPIO_1__USB_OTG_ID 0x17059
+				MX6QDL_PAD_EIM_D22__USB_OTG_PWR 0x17059
+				MX6QDL_PAD_EIM_D21__USB_OTG_OC 0x17059
+			>;
+		};
 	};
 
 	usbh2 {
@@ -1620,19 +1703,6 @@
 		pinctrl_usbh3_2: usbh3grp-2 {
 			fsl,pins = <
 				MX6QDL_PAD_RGMII_RXC__USB_H3_STROBE 0x40017030
-			>;
-		};
-	};
-
-	usdhc1 {
-		pinctrl_usdhc1_1: usdhc1grp-1 {
-			fsl,pins = <
-				MX6QDL_PAD_SD1_CMD__SD1_CMD    0x17059
-				MX6QDL_PAD_SD1_CLK__SD1_CLK    0x10059
-				MX6QDL_PAD_SD1_DAT0__SD1_DATA0 0x17059
-				MX6QDL_PAD_SD1_DAT1__SD1_DATA1 0x17059
-				MX6QDL_PAD_SD1_DAT2__SD1_DATA2 0x17059
-				MX6QDL_PAD_SD1_DAT3__SD1_DATA3 0x17059
 			>;
 		};
 	};

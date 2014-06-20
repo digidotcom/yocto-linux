@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2011-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,9 +34,10 @@ struct mipi_csi2_info {
 	unsigned int	v_channel;
 	unsigned int	lanes;
 	unsigned int	datatype;
+	struct clk	*cfg_clk;
 	struct clk	*dphy_clk;
 	struct clk	*pixel_clk;
-	unsigned int	*mipi_csi2_base;
+	void __iomem	*mipi_csi2_base;
 	struct platform_device	*pdev;
 
 	struct mutex mutex_lock;

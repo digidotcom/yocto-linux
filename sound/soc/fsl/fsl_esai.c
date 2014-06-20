@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2008-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -41,6 +41,7 @@ static int fsl_esai_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 	struct fsl_esai *esai = snd_soc_dai_get_drvdata(cpu_dai);
 	u32 ecr, tccr, rccr;
 
+	clk_enable(esai->clk);
 	ecr = readl(esai->base + ESAI_ECR);
 	tccr = readl(esai->base + ESAI_TCCR);
 	rccr = readl(esai->base + ESAI_RCCR);
@@ -73,6 +74,8 @@ static int fsl_esai_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 	writel(rccr, esai->base + ESAI_RCCR);
 
 	ESAI_DUMP();
+	clk_disable(esai->clk);
+
 	return 0;
 }
 
@@ -82,6 +85,7 @@ static int fsl_esai_set_dai_clkdiv(struct snd_soc_dai *cpu_dai,
 	struct fsl_esai *esai = snd_soc_dai_get_drvdata(cpu_dai);
 	u32 tccr, rccr;
 
+	clk_enable(esai->clk);
 	tccr = readl(esai->base + ESAI_TCCR);
 	rccr = readl(esai->base + ESAI_RCCR);
 
@@ -133,6 +137,8 @@ static int fsl_esai_set_dai_clkdiv(struct snd_soc_dai *cpu_dai,
 	}
 	writel(tccr, esai->base + ESAI_TCCR);
 	writel(rccr, esai->base + ESAI_RCCR);
+	clk_disable(esai->clk);
+
 	return 0;
 }
 
@@ -145,6 +151,7 @@ static int fsl_esai_set_dai_tdm_slot(struct snd_soc_dai *cpu_dai,
 	struct fsl_esai *esai = snd_soc_dai_get_drvdata(cpu_dai);
 	u32 tccr, rccr;
 
+	clk_enable(esai->clk);
 	tccr = readl(esai->base + ESAI_TCCR);
 
 	tccr &= ESAI_TCCR_TDC_MASK;
@@ -164,6 +171,8 @@ static int fsl_esai_set_dai_tdm_slot(struct snd_soc_dai *cpu_dai,
 	writel(((rx_mask >> 16) & 0xffff), esai->base + ESAI_RSMB);
 
 	ESAI_DUMP();
+	clk_disable(esai->clk);
+
 	return 0;
 }
 
@@ -175,6 +184,7 @@ static int fsl_esai_set_dai_fmt(struct snd_soc_dai *cpu_dai, unsigned int fmt)
 	struct fsl_esai *esai = snd_soc_dai_get_drvdata(cpu_dai);
 	u32 tcr, tccr, rcr, rccr, saicr;
 
+	clk_enable(esai->clk);
 	tcr = readl(esai->base + ESAI_TCR);
 	tccr = readl(esai->base + ESAI_TCCR);
 	rcr = readl(esai->base + ESAI_RCR);
@@ -285,6 +295,8 @@ static int fsl_esai_set_dai_fmt(struct snd_soc_dai *cpu_dai, unsigned int fmt)
 	writel(saicr, esai->base + ESAI_SAICR);
 
 	ESAI_DUMP();
+	clk_disable(esai->clk);
+
 	return 0;
 }
 
@@ -554,6 +566,32 @@ static const struct snd_soc_component_driver fsl_esai_component = {
 	.name		= "fsl-esai",
 };
 
+static int fsl_esai_reg_init(struct fsl_esai *esai)
+{
+	u32 xccr, slots = 2;
+
+	clk_enable(esai->clk);
+
+	/* Reset and enable the ESAI module */
+	writel(ESAI_ECR_ERST, esai->base + ESAI_ECR);
+	writel(ESAI_ECR_ESAIEN, esai->base + ESAI_ECR);
+
+	/* Set default slot number to 2 for common DAI FMTs */
+	xccr = readl(esai->base + ESAI_TCCR);
+	xccr &= ESAI_TCCR_TDC_MASK;
+	xccr |= ESAI_TCCR_TDC(slots - 1);
+	writel(xccr, esai->base + ESAI_TCCR);
+
+	xccr = readl(esai->base + ESAI_RCCR);
+	xccr &= ESAI_RCCR_RDC_MASK;
+	xccr |= ESAI_RCCR_RDC(slots - 1);
+	writel(xccr, esai->base + ESAI_RCCR);
+
+	clk_disable(esai->clk);
+
+	return 0;
+}
+
 static int fsl_esai_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -658,8 +696,8 @@ static int fsl_esai_probe(struct platform_device *pdev)
 		goto failed_pcm_init;
 	}
 
-	writel(ESAI_ECR_ERST, esai->base + ESAI_ECR);
-	writel(ESAI_ECR_ESAIEN, esai->base + ESAI_ECR);
+	fsl_esai_reg_init(esai);
+
 	return 0;
 
 failed_pcm_init:

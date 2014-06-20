@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2010-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,74 +27,276 @@
 #include <linux/dma-mapping.h>
 #include <linux/sched.h>
 #include <linux/module.h>
-#include <linux/pxp_dma.h>
+#include <linux/pxp_device.h>
 #include <linux/atomic.h>
 #include <linux/platform_data/dma-imx.h>
 
-static atomic_t open_count = ATOMIC_INIT(0);
+#define BUFFER_HASH_ORDER 4
 
-static DEFINE_SPINLOCK(pxp_mem_lock);
-static DEFINE_SPINLOCK(pxp_chan_lock);
-static LIST_HEAD(head);
-static LIST_HEAD(list);
+static struct pxp_buffer_hash bufhash;
 static struct pxp_irq_info irq_info[NR_PXP_VIRT_CHANNEL];
 
-struct pxp_chan_handle {
-	int chan_id;
-	int hist_status;
-};
-
-/* To track the allocated memory buffer */
-struct memalloc_record {
-	struct list_head list;
-	struct pxp_mem_desc mem;
-};
-
-struct pxp_chan_info {
-	int chan_id;
-	struct dma_chan *dma_chan;
-	struct list_head list;
-};
-
-static int pxp_alloc_dma_buffer(struct pxp_mem_desc *mem)
+static int pxp_ht_create(struct pxp_buffer_hash *hash, int order)
 {
-	mem->cpu_addr = (unsigned long)
-	    dma_alloc_coherent(NULL, PAGE_ALIGN(mem->size),
-			       (dma_addr_t *) (&mem->phys_addr),
+	unsigned long i;
+	unsigned long table_size;
+
+	table_size = 1U << order;
+
+	hash->order = order;
+	hash->hash_table = kmalloc(sizeof(*hash->hash_table) * table_size, GFP_KERNEL);
+
+	if (!hash->hash_table) {
+		pr_err("%s: Out of memory for hash table\n", __func__);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < table_size; i++)
+		INIT_HLIST_HEAD(&hash->hash_table[i]);
+
+	return 0;
+}
+
+static int pxp_ht_insert_item(struct pxp_buffer_hash *hash,
+			      struct pxp_buf_obj *new)
+{
+	unsigned long hashkey;
+	struct hlist_head *h_list;
+
+	hashkey = hash_long(new->offset >> PAGE_SHIFT, hash->order);
+	h_list = &hash->hash_table[hashkey];
+
+	spin_lock(&hash->hash_lock);
+	hlist_add_head_rcu(&new->item, h_list);
+	spin_unlock(&hash->hash_lock);
+
+	return 0;
+}
+
+static int pxp_ht_remove_item(struct pxp_buffer_hash *hash,
+			      struct pxp_buf_obj *obj)
+{
+	spin_lock(&hash->hash_lock);
+	hlist_del_init_rcu(&obj->item);
+	spin_unlock(&hash->hash_lock);
+	return 0;
+}
+
+static struct hlist_node *pxp_ht_find_key(struct pxp_buffer_hash *hash,
+					  unsigned long key)
+{
+	struct pxp_buf_obj *entry;
+	struct hlist_head *h_list;
+	unsigned long hashkey;
+
+	hashkey = hash_long(key, hash->order);
+	h_list = &hash->hash_table[hashkey];
+
+	hlist_for_each_entry_rcu(entry, h_list, item) {
+		if (entry->offset >> PAGE_SHIFT == key)
+			return &entry->item;
+	}
+
+	return NULL;
+}
+
+static void pxp_ht_destroy(struct pxp_buffer_hash *hash)
+{
+	kfree(hash->hash_table);
+	hash->hash_table = NULL;
+}
+
+static int pxp_buffer_handle_create(struct pxp_file *file_priv,
+				    struct pxp_buf_obj *obj,
+				    uint32_t *handlep)
+{
+	int ret;
+
+	idr_preload(GFP_KERNEL);
+	spin_lock(&file_priv->buffer_lock);
+
+	ret = idr_alloc(&file_priv->buffer_idr, obj, 1, 0, GFP_NOWAIT);
+
+	spin_unlock(&file_priv->buffer_lock);
+	idr_preload_end();
+
+	if (ret < 0)
+		return ret;
+
+	*handlep = ret;
+
+	return 0;
+}
+
+static struct pxp_buf_obj *
+pxp_buffer_object_lookup(struct pxp_file *file_priv,
+			 uint32_t handle)
+{
+	struct pxp_buf_obj *obj;
+
+	spin_lock(&file_priv->buffer_lock);
+
+	obj = idr_find(&file_priv->buffer_idr, handle);
+	if (!obj) {
+		spin_unlock(&file_priv->buffer_lock);
+		return NULL;
+	}
+
+	spin_unlock(&file_priv->buffer_lock);
+
+	return obj;
+}
+
+static int pxp_buffer_handle_delete(struct pxp_file *file_priv,
+				    uint32_t handle)
+{
+	struct pxp_buf_obj *obj;
+
+	spin_lock(&file_priv->buffer_lock);
+
+	obj = idr_find(&file_priv->buffer_idr, handle);
+	if (!obj) {
+		spin_unlock(&file_priv->buffer_lock);
+		return -EINVAL;
+	}
+
+	idr_remove(&file_priv->buffer_idr, handle);
+	spin_unlock(&file_priv->buffer_lock);
+
+	return 0;
+}
+
+static int pxp_channel_handle_create(struct pxp_file *file_priv,
+				     struct pxp_chan_obj *obj,
+				     uint32_t *handlep)
+{
+	int ret;
+
+	idr_preload(GFP_KERNEL);
+	spin_lock(&file_priv->channel_lock);
+
+	ret = idr_alloc(&file_priv->channel_idr, obj, 0, 0, GFP_NOWAIT);
+
+	spin_unlock(&file_priv->channel_lock);
+	idr_preload_end();
+
+	if (ret < 0)
+		return ret;
+
+	*handlep = ret;
+
+	return 0;
+}
+
+static struct pxp_chan_obj *
+pxp_channel_object_lookup(struct pxp_file *file_priv,
+			  uint32_t handle)
+{
+	struct pxp_chan_obj *obj;
+
+	spin_lock(&file_priv->channel_lock);
+
+	obj = idr_find(&file_priv->channel_idr, handle);
+	if (!obj) {
+		spin_unlock(&file_priv->channel_lock);
+		return NULL;
+	}
+
+	spin_unlock(&file_priv->channel_lock);
+
+	return obj;
+}
+
+static int pxp_channel_handle_delete(struct pxp_file *file_priv,
+				     uint32_t handle)
+{
+	struct pxp_chan_obj *obj;
+
+	spin_lock(&file_priv->channel_lock);
+
+	obj = idr_find(&file_priv->channel_idr, handle);
+	if (!obj) {
+		spin_unlock(&file_priv->channel_lock);
+		return -EINVAL;
+	}
+
+	idr_remove(&file_priv->channel_idr, handle);
+	spin_unlock(&file_priv->channel_lock);
+
+	return 0;
+}
+
+static int pxp_alloc_dma_buffer(struct pxp_buf_obj *obj)
+{
+	obj->virtual = dma_alloc_coherent(NULL, PAGE_ALIGN(obj->size),
+			       (dma_addr_t *) (&obj->offset),
 			       GFP_DMA | GFP_KERNEL);
-	pr_debug("[ALLOC] mem alloc phys_addr = 0x%x\n", mem->phys_addr);
-	if ((void *)(mem->cpu_addr) == NULL) {
+	pr_debug("[ALLOC] mem alloc phys_addr = 0x%lx\n", obj->offset);
+
+	if (obj->virtual == NULL) {
 		printk(KERN_ERR "Physical memory allocation error!\n");
 		return -1;
 	}
+
 	return 0;
 }
 
-static void pxp_free_dma_buffer(struct pxp_mem_desc *mem)
+static void pxp_free_dma_buffer(struct pxp_buf_obj *obj)
 {
-	if (mem->cpu_addr != 0) {
-		dma_free_coherent(0, PAGE_ALIGN(mem->size),
-				  (void *)mem->cpu_addr, mem->phys_addr);
+	if (obj->virtual != NULL) {
+		dma_free_coherent(0, PAGE_ALIGN(obj->size),
+				  obj->virtual, (dma_addr_t)obj->offset);
 	}
 }
 
-static int pxp_free_buffers(void)
+static int
+pxp_buffer_object_free(int id, void *ptr, void *data)
 {
-	struct memalloc_record *rec, *n;
-	struct pxp_mem_desc mem;
+	struct pxp_file *file_priv = data;
+	struct pxp_buf_obj *obj = ptr;
+	int ret;
 
-	list_for_each_entry_safe(rec, n, &head, list) {
-		mem = rec->mem;
-		if (mem.cpu_addr != 0) {
-			pxp_free_dma_buffer(&mem);
-			pr_debug("[FREE] freed paddr=0x%08X\n", mem.phys_addr);
-			/* delete from list */
-			list_del(&rec->list);
-			kfree(rec);
-		}
-	}
+	ret = pxp_buffer_handle_delete(file_priv, obj->handle);
+	if (ret < 0)
+		return ret;
+
+	pxp_ht_remove_item(&bufhash, obj);
+	pxp_free_dma_buffer(obj);
+	kfree(obj);
 
 	return 0;
+}
+
+static int
+pxp_channel_object_free(int id, void *ptr, void *data)
+{
+	struct pxp_file *file_priv = data;
+	struct pxp_chan_obj *obj = ptr;
+	int chan_id;
+
+	chan_id = obj->chan->chan_id;
+	wait_event(irq_info[chan_id].waitq,
+		atomic_read(&irq_info[chan_id].irq_pending) == 0);
+
+	pxp_channel_handle_delete(file_priv, obj->handle);
+	dma_release_channel(obj->chan);
+	kfree(obj);
+
+	return 0;
+}
+
+static void pxp_free_buffers(struct pxp_file *file_priv)
+{
+	idr_for_each(&file_priv->buffer_idr,
+			&pxp_buffer_object_free, file_priv);
+	idr_destroy(&file_priv->buffer_idr);
+}
+
+static void pxp_free_channels(struct pxp_file *file_priv)
+{
+	idr_for_each(&file_priv->channel_idr,
+			&pxp_channel_object_free, file_priv);
+	idr_destroy(&file_priv->channel_idr);
 }
 
 /* Callback function triggered after PxP receives an EOF interrupt */
@@ -107,22 +309,23 @@ static void pxp_dma_done(void *arg)
 
 	pr_debug("DMA Done ISR, chan_id %d\n", chan_id);
 
-	irq_info[chan_id].irq_pending++;
+	atomic_dec(&irq_info[chan_id].irq_pending);
 	irq_info[chan_id].hist_status = tx_desc->hist_status;
 
-	wake_up_interruptible(&(irq_info[chan_id].waitq));
+	wake_up(&(irq_info[chan_id].waitq));
 }
 
-static int pxp_ioc_config_chan(unsigned long arg)
+static int pxp_ioc_config_chan(struct pxp_file *priv, unsigned long arg)
 {
 	struct scatterlist sg[3];
 	struct pxp_tx_desc *desc;
 	struct dma_async_tx_descriptor *txd;
-	struct pxp_chan_info *info;
 	struct pxp_config_data pxp_conf;
 	dma_cookie_t cookie;
-	int chan_id;
+	int handle, chan_id;
 	int i, length, ret;
+	struct dma_chan *chan;
+	struct pxp_chan_obj *obj;
 
 	ret = copy_from_user(&pxp_conf,
 			     (struct pxp_config_data *)arg,
@@ -130,28 +333,20 @@ static int pxp_ioc_config_chan(unsigned long arg)
 	if (ret)
 		return -EFAULT;
 
-	chan_id = pxp_conf.chan_id;
-	if (chan_id < 0 || chan_id >= NR_PXP_VIRT_CHANNEL)
-		return -ENODEV;
-
-	init_waitqueue_head(&(irq_info[chan_id].waitq));
-
-	/* find the channel */
-	spin_lock(&pxp_chan_lock);
-	list_for_each_entry(info, &list, list) {
-		if (info->dma_chan->chan_id == chan_id)
-			break;
-	}
-	spin_unlock(&pxp_chan_lock);
+	handle = pxp_conf.handle;
+	obj = pxp_channel_object_lookup(priv, handle);
+	if (!obj)
+		return -EINVAL;
+	chan = obj->chan;
+	chan_id = chan->chan_id;
 
 	sg_init_table(sg, 3);
 
-	txd =
-	    info->dma_chan->device->device_prep_slave_sg(info->dma_chan,
-							 sg, 3,
-							 DMA_TO_DEVICE,
-							 DMA_PREP_INTERRUPT,
-							 NULL);
+	txd = chan->device->device_prep_slave_sg(chan,
+						 sg, 3,
+						 DMA_TO_DEVICE,
+						 DMA_PREP_INTERRUPT,
+						 NULL);
 	if (!txd) {
 		pr_err("Error preparing a DMA transaction descriptor.\n");
 		return -EIO;
@@ -191,50 +386,80 @@ static int pxp_ioc_config_chan(unsigned long arg)
 		return -EIO;
 	}
 
+	atomic_inc(&irq_info[chan_id].irq_pending);
+
 	return 0;
 }
 
 static int pxp_device_open(struct inode *inode, struct file *filp)
 {
-	atomic_inc(&open_count);
+	struct pxp_file *priv;
+
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+
+	if (!priv)
+		return -ENOMEM;
+
+	filp->private_data = priv;
+	priv->filp = filp;
+
+	idr_init(&priv->buffer_idr);
+	spin_lock_init(&priv->buffer_lock);
+
+	idr_init(&priv->channel_idr);
+	spin_lock_init(&priv->channel_lock);
 
 	return 0;
 }
 
 static int pxp_device_release(struct inode *inode, struct file *filp)
 {
-	if (atomic_dec_and_test(&open_count))
-		pxp_free_buffers();
+	struct pxp_file *priv = filp->private_data;
+
+	if (priv) {
+		pxp_free_channels(priv);
+		pxp_free_buffers(priv);
+		kfree(priv);
+		filp->private_data = NULL;
+	}
 
 	return 0;
 }
 
 static int pxp_device_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	struct memalloc_record *rec, *n;
-	int request_size, found;
+	int request_size;
+	struct hlist_node *node;
+	struct pxp_buf_obj *obj;
 
 	request_size = vma->vm_end - vma->vm_start;
-	found = 0;
 
 	pr_debug("start=0x%x, pgoff=0x%x, size=0x%x\n",
 		 (unsigned int)(vma->vm_start), (unsigned int)(vma->vm_pgoff),
 		 request_size);
 
-	spin_lock(&pxp_mem_lock);
-	list_for_each_entry_safe(rec, n, &head, list) {
-		if (rec->mem.phys_addr == (vma->vm_pgoff << PAGE_SHIFT) &&
-			(rec->mem.size <= request_size)) {
-			found = 1;
-			break;
-		}
-	}
-	spin_unlock(&pxp_mem_lock);
+	node = pxp_ht_find_key(&bufhash, vma->vm_pgoff);
+	if (!node)
+		return -EINVAL;
 
-	if (found == 0)
+	obj = list_entry(node, struct pxp_buf_obj, item);
+	if (obj->offset + (obj->size >> PAGE_SHIFT) <
+		(vma->vm_pgoff + vma_pages(vma)))
 		return -ENOMEM;
 
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	switch (obj->mem_type) {
+	case MEMORY_TYPE_UNCACHED:
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+		break;
+	case MEMORY_TYPE_WC:
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+		break;
+	case MEMORY_TYPE_CACHED:
+		break;
+	default:
+		pr_err("%s: invalid memory type!\n", __func__);
+		return -EINVAL;
+	}
 
 	return remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff,
 			       request_size, vma->vm_page_prot) ? -EAGAIN : 0;
@@ -252,78 +477,81 @@ static long pxp_device_ioctl(struct file *filp,
 			    unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
+	struct pxp_file *file_priv = filp->private_data;
 
 	switch (cmd) {
 	case PXP_IOC_GET_CHAN:
 		{
-			struct pxp_chan_info *info;
+			int ret;
+			struct dma_chan *chan = NULL;
 			dma_cap_mask_t mask;
+			struct pxp_chan_obj *obj = NULL;
 
 			pr_debug("drv: PXP_IOC_GET_CHAN Line %d\n", __LINE__);
-			info = kzalloc(sizeof(*info), GFP_KERNEL);
-			if (!info) {
-				pr_err("%d: alloc err\n", __LINE__);
-				return -ENOMEM;
-			}
 
 			dma_cap_zero(mask);
 			dma_cap_set(DMA_SLAVE, mask);
 			dma_cap_set(DMA_PRIVATE, mask);
-			info->dma_chan =
-				dma_request_channel(mask, chan_filter, NULL);
-			if (!info->dma_chan) {
+
+			chan = dma_request_channel(mask, chan_filter, NULL);
+			if (!chan) {
 				pr_err("Unsccessfully received channel!\n");
-				kfree(info);
 				return -EBUSY;
 			}
+
 			pr_debug("Successfully received channel."
-				 "chan_id %d\n", info->dma_chan->chan_id);
+				 "chan_id %d\n", chan->chan_id);
 
-			spin_lock(&pxp_chan_lock);
-			list_add_tail(&info->list, &list);
-			spin_unlock(&pxp_chan_lock);
+			obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+			if (!obj) {
+				dma_release_channel(chan);
+				return -ENOMEM;
+			}
+			obj->chan = chan;
 
-			if (put_user
-			    (info->dma_chan->chan_id, (u32 __user *) arg))
+			ret = pxp_channel_handle_create(file_priv, obj,
+							&obj->handle);
+			if (ret) {
+				dma_release_channel(chan);
+				kfree(obj);
+				return ret;
+			}
+
+			init_waitqueue_head(&(irq_info[chan->chan_id].waitq));
+			if (put_user(obj->handle, (u32 __user *) arg)) {
+				pxp_channel_handle_delete(file_priv, obj->handle);
+				dma_release_channel(chan);
+				kfree(obj);
 				return -EFAULT;
+			}
 
 			break;
 		}
 	case PXP_IOC_PUT_CHAN:
 		{
-			int chan_id;
-			struct pxp_chan_info *info;
+			int handle;
+			struct pxp_chan_obj *obj;
 
-			if (get_user(chan_id, (u32 __user *) arg))
+			if (get_user(handle, (u32 __user *) arg))
 				return -EFAULT;
 
-			if (chan_id < 0 || chan_id >= NR_PXP_VIRT_CHANNEL)
-				return -ENODEV;
+			pr_debug("%d release handle %d\n", __LINE__, handle);
 
-			spin_lock(&pxp_chan_lock);
-			list_for_each_entry(info, &list, list) {
-				if (info->dma_chan->chan_id == chan_id)
-					break;
-			}
-			spin_unlock(&pxp_chan_lock);
+			obj = pxp_channel_object_lookup(file_priv, handle);
+			if (!obj)
+				return -EINVAL;
 
-			pr_debug("%d release chan_id %d\n", __LINE__,
-				 info->dma_chan->chan_id);
-			/* REVISIT */
-			dma_release_channel(info->dma_chan);
-			spin_lock(&pxp_chan_lock);
-			list_del_init(&info->list);
-			spin_unlock(&pxp_chan_lock);
-			kfree(info);
+			pxp_channel_handle_delete(file_priv, obj->handle);
+			dma_release_channel(obj->chan);
+			kfree(obj);
 
 			break;
 		}
 	case PXP_IOC_CONFIG_CHAN:
 		{
-
 			int ret;
 
-			ret = pxp_ioc_config_chan(arg);
+			ret = pxp_ioc_config_chan(file_priv, arg);
 			if (ret)
 				return ret;
 
@@ -331,68 +559,74 @@ static long pxp_device_ioctl(struct file *filp,
 		}
 	case PXP_IOC_START_CHAN:
 		{
-			struct pxp_chan_info *info;
-			int chan_id;
+			int handle;
+			struct pxp_chan_obj *obj = NULL;
 
-			if (get_user(chan_id, (u32 __user *) arg))
+			if (get_user(handle, (u32 __user *) arg))
 				return -EFAULT;
 
-			/* find the channel */
-			spin_lock(&pxp_chan_lock);
-			list_for_each_entry(info, &list, list) {
-				if (info->dma_chan->chan_id == chan_id)
-					break;
-			}
-			spin_unlock(&pxp_chan_lock);
+			obj = pxp_channel_object_lookup(file_priv, handle);
+			if (!obj)
+				return -EINVAL;
 
-			dma_async_issue_pending(info->dma_chan);
+			dma_async_issue_pending(obj->chan);
 
 			break;
 		}
 	case PXP_IOC_GET_PHYMEM:
 		{
-			struct memalloc_record *rec;
+			struct pxp_mem_desc buffer;
+			struct pxp_buf_obj *obj;
 
-			rec = kzalloc(sizeof(*rec), GFP_KERNEL);
-			if (!rec)
-				return -ENOMEM;
-
-			ret = copy_from_user(&(rec->mem),
+			ret = copy_from_user(&buffer,
 					     (struct pxp_mem_desc *)arg,
 					     sizeof(struct pxp_mem_desc));
+			if (ret)
+				return -EFAULT;
+
+			pr_debug("[ALLOC] mem alloc size = 0x%x\n",
+				 buffer.size);
+
+			obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+			if (!obj)
+				return -ENOMEM;
+			obj->size = buffer.size;
+			obj->mem_type = buffer.mtype;
+
+			ret = pxp_alloc_dma_buffer(obj);
+			if (ret == -1) {
+				printk(KERN_ERR
+				       "Physical memory allocation error!\n");
+				kfree(obj);
+				return ret;
+			}
+
+			ret = pxp_buffer_handle_create(file_priv, obj, &obj->handle);
 			if (ret) {
-				kfree(rec);
+				pxp_free_dma_buffer(obj);
+				kfree(obj);
+				return ret;
+			}
+			buffer.handle = obj->handle;
+			buffer.phys_addr = obj->offset;
+
+			ret = copy_to_user((void __user *)arg, &buffer,
+					   sizeof(struct pxp_mem_desc));
+			if (ret) {
+				pxp_buffer_handle_delete(file_priv, buffer.handle);
+				pxp_free_dma_buffer(obj);
+				kfree(obj);
 				return -EFAULT;
 			}
 
-			pr_debug("[ALLOC] mem alloc size = 0x%x\n",
-				 rec->mem.size);
-
-			ret = pxp_alloc_dma_buffer(&(rec->mem));
-			if (ret == -1) {
-				kfree(rec);
-				printk(KERN_ERR
-				       "Physical memory allocation error!\n");
-				break;
-			}
-			ret = copy_to_user((void __user *)arg, &(rec->mem),
-					   sizeof(struct pxp_mem_desc));
-			if (ret) {
-				kfree(rec);
-				ret = -EFAULT;
-				break;
-			}
-
-			spin_lock(&pxp_mem_lock);
-			list_add(&rec->list, &head);
-			spin_unlock(&pxp_mem_lock);
+			pxp_ht_insert_item(&bufhash, obj);
 
 			break;
 		}
 	case PXP_IOC_PUT_PHYMEM:
 		{
-			struct memalloc_record *rec, *n;
 			struct pxp_mem_desc pxp_mem;
+			struct pxp_buf_obj *obj;
 
 			ret = copy_from_user(&pxp_mem,
 					     (struct pxp_mem_desc *)arg,
@@ -400,28 +634,63 @@ static long pxp_device_ioctl(struct file *filp,
 			if (ret)
 				return -EACCES;
 
-			pr_debug("[FREE] mem freed cpu_addr = 0x%x\n",
-				 pxp_mem.cpu_addr);
-			if ((void *)pxp_mem.cpu_addr != NULL)
-				pxp_free_dma_buffer(&pxp_mem);
+			obj = pxp_buffer_object_lookup(file_priv, pxp_mem.handle);
+			if (!obj)
+				return -EINVAL;
 
-			spin_lock(&pxp_mem_lock);
-			list_for_each_entry_safe(rec, n, &head, list) {
-				if (rec->mem.cpu_addr == pxp_mem.cpu_addr) {
-					/* delete from list */
-					list_del(&rec->list);
-					kfree(rec);
-					break;
-				}
+			ret = pxp_buffer_handle_delete(file_priv, obj->handle);
+			if (ret)
+				return ret;
+
+			pxp_ht_remove_item(&bufhash, obj);
+			pxp_free_dma_buffer(obj);
+			kfree(obj);
+
+			break;
+		}
+	case PXP_IOC_FLUSH_PHYMEM:
+		{
+			int ret;
+			struct pxp_mem_flush flush;
+			struct pxp_buf_obj *obj;
+
+			ret = copy_from_user(&flush,
+					     (struct pxp_mem_flush *)arg,
+					     sizeof(struct pxp_mem_flush));
+			if (ret)
+				return -EACCES;
+
+			obj = pxp_buffer_object_lookup(file_priv, flush.handle);
+			if (!obj)
+				return -EINVAL;
+
+			switch (flush.type) {
+			case CACHE_CLEAN:
+				dma_sync_single_for_device(NULL, obj->offset,
+						obj->size, DMA_TO_DEVICE);
+				break;
+			case CACHE_INVALIDATE:
+				dma_sync_single_for_device(NULL, obj->offset,
+						obj->size, DMA_FROM_DEVICE);
+				break;
+			case CACHE_FLUSH:
+				dma_sync_single_for_device(NULL, obj->offset,
+						obj->size, DMA_TO_DEVICE);
+				dma_sync_single_for_device(NULL, obj->offset,
+						obj->size, DMA_FROM_DEVICE);
+				break;
+			default:
+				pr_err("%s: invalid cache flush type\n", __func__);
+				return -EINVAL;
 			}
-			spin_unlock(&pxp_mem_lock);
 
 			break;
 		}
 	case PXP_IOC_WAIT4CMPLT:
 		{
 			struct pxp_chan_handle chan_handle;
-			int ret, chan_id;
+			int ret, chan_id, handle;
+			struct pxp_chan_obj *obj = NULL;
 
 			ret = copy_from_user(&chan_handle,
 					     (struct pxp_chan_handle *)arg,
@@ -429,19 +698,17 @@ static long pxp_device_ioctl(struct file *filp,
 			if (ret)
 				return -EFAULT;
 
-			chan_id = chan_handle.chan_id;
-			if (chan_id < 0 || chan_id >= NR_PXP_VIRT_CHANNEL)
-				return -ENODEV;
+			handle = chan_handle.handle;
+			obj = pxp_channel_object_lookup(file_priv, handle);
+			if (!obj)
+				return -EINVAL;
+			chan_id = obj->chan->chan_id;
 
 			ret = wait_event_interruptible
 			    (irq_info[chan_id].waitq,
-			     (irq_info[chan_id].irq_pending != 0));
-			if (ret < 0) {
-				printk(KERN_WARNING
-				       "pxp interrupt received.\n");
+			     (atomic_read(&irq_info[chan_id].irq_pending) == 0));
+			if (ret < 0)
 				return -ERESTARTSYS;
-			} else
-				irq_info[chan_id].irq_pending--;
 
 			chan_handle.hist_status = irq_info[chan_id].hist_status;
 			ret = copy_to_user((struct pxp_chan_handle *)arg,
@@ -479,11 +746,17 @@ int register_pxp_device(void)
 	if (ret)
 		return ret;
 
+	ret = pxp_ht_create(&bufhash, BUFFER_HASH_ORDER);
+	if (ret)
+		return ret;
+	spin_lock_init(&(bufhash.hash_lock));
+
 	pr_debug("PxP_Device registered Successfully\n");
 	return 0;
 }
 
 void unregister_pxp_device(void)
 {
+	pxp_ht_destroy(&bufhash);
 	misc_deregister(&pxp_device_miscdev);
 }

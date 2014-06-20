@@ -688,6 +688,7 @@ static inline void imx28_ehci_writel(const unsigned int val,
 {
 }
 #endif
+
 static inline void ehci_writel(const struct ehci_hcd *ehci,
 		const unsigned int val, __u32 __iomem *regs)
 {

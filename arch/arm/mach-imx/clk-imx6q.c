@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Freescale Semiconductor, Inc.
+ * Copyright 2011-2014 Freescale Semiconductor, Inc.
  * Copyright 2011 Linaro Ltd.
  *
  * The code contained herein is licensed under the GNU General Public
@@ -73,6 +73,10 @@ static const char *cko2_sels[] = {
 static const char *cko_sels[] = { "cko1", "cko2", };
 static const char *lvds_sels[]	= { "arm", "pll1_sys", "dummy", "dummy", "dummy", "dummy", "dummy", "pll5_video_div",
 				    "dummy", "dummy", "pcie_ref", "sata_ref", "usbphy1", "usbphy2", };
+static const char *pll_av_sels[] = { "osc", "lvds1_in", "lvds2_in", "dummy", };
+static void __iomem *anatop_base;
+static void __iomem *ccm_base;
+
 
 enum mx6q_clks {
 	dummy, ckil, ckih, osc, pll2_pfd0_352m, pll2_pfd1_594m, pll2_pfd2_396m,
@@ -110,7 +114,8 @@ enum mx6q_clks {
 	spdif, cko2_sel, cko2_podf, cko2, cko, vdoa, gpt_3m, video_27m,
 	ldb_di0_div_7, ldb_di1_div_7, ldb_di0_div_sel, ldb_di1_div_sel,
 	pll4_audio_div, lvds1_sel, lvds1_in, lvds1_out, caam_mem, caam_aclk,
-	caam_ipg, epit1, epit2, tzasc2, clk_max
+	caam_ipg, epit1, epit2, tzasc2, pll4_sel, lvds2_sel, lvds2_in, lvds2_out,
+	anaclk1, anaclk2, clk_max
 };
 
 static struct clk *clk[clk_max];
@@ -142,20 +147,131 @@ static struct clk_div_table video_div_table[] = {
 	{ }
 };
 
+static void init_ldb_clks(enum mx6q_clks new_parent)
+{
+	u32 reg;
+
+	/*
+	 * Need to follow a strict procedure when changing the LDB
+	 * clock, else we can introduce a glitch. Things to keep in
+	 * mind:
+	 * 1. The current and new parent clocks must be disabled.
+	 * 2. The default clock for ldb_dio_clk is mmdc_ch1 which has
+	 * no CG bit.
+	 * 3. In the RTL implementation of the LDB_DI_CLK_SEL mux
+	 * the top four options are in one mux and the PLL3 option along
+	 * with another option is in the second mux. There is third mux
+	 * used to decide between the first and second mux.
+	 * The code below switches the parent to the bottom mux first
+	 * and then manipulates the top mux. This ensures that no glitch
+	 * will enter the divider.
+	 *
+	 * Need to disable MMDC_CH1 clock manually as there is no CG bit
+	 * for this clock. The only way to disable this clock is to move
+	 * it topll3_sw_clk and then to disable pll3_sw_clk
+	 * Make sure periph2_clk2_sel is set to pll3_sw_clk
+	 */
+	reg = readl_relaxed(ccm_base + 0x18);
+	reg &= ~(1 << 20);
+	writel_relaxed(reg, ccm_base + 0x18);
+
+	/*
+	 * Set MMDC_CH1 mask bit.
+	 */
+	reg = readl_relaxed(ccm_base + 0x4);
+	reg |= 1 << 16;
+	writel_relaxed(reg, ccm_base + 0x4);
+
+	/*
+	 * Set the periph2_clk_sel to the top mux so that
+	 * mmdc_ch1 is from pll3_sw_clk.
+	 */
+	reg = readl_relaxed(ccm_base + 0x14);
+	reg |= 1 << 26;
+	writel_relaxed(reg, ccm_base + 0x14);
+
+	/*
+	 * Wait for the clock switch.
+	 */
+	while (readl_relaxed(ccm_base + 0x48))
+		;
+
+	/*
+	 * Disable pll3_sw_clk by selecting the bypass clock source.
+	 */
+	reg = readl_relaxed(ccm_base + 0xc);
+	reg |= 1 << 0;
+	writel_relaxed(reg, ccm_base + 0xc);
+
+	/*
+	 * Set the ldb_di0_clk and ldb_di1_clk to 111b.
+	 */
+	reg = readl_relaxed(ccm_base + 0x2c);
+	reg |= ((7 << 9) | (7 << 12));
+	writel_relaxed(reg, ccm_base + 0x2c);
+
+	/*
+	 * Set the ldb_di0_clk and ldb_di1_clk to 100b.
+	 */
+	reg = readl_relaxed(ccm_base + 0x2c);
+	reg &= ~((7 << 9) | (7 << 12));
+	reg |= ((4 << 9) | (4 << 12));
+	writel_relaxed(reg, ccm_base + 0x2c);
+
+	/*
+	 * Perform the LDB parent clock switch.
+	 */
+	clk_set_parent(clk[ldb_di0_sel], clk[new_parent]);
+	clk_set_parent(clk[ldb_di1_sel], clk[new_parent]);
+
+	/*
+	 * Unbypass pll3_sw_clk.
+	 */
+	reg = readl_relaxed(ccm_base + 0xc);
+	reg &= ~(1 << 0);
+	writel_relaxed(reg, ccm_base + 0xc);
+
+	/*
+	 * Set the periph2_clk_sel back to the bottom mux so that
+	 * mmdc_ch1 is from its original parent.
+	 */
+	reg = readl_relaxed(ccm_base + 0x14);
+	reg &= ~(1 << 26);
+	writel_relaxed(reg, ccm_base + 0x14);
+
+	/*
+	 * Wait for the clock switch.
+	 */
+	while (readl_relaxed(ccm_base + 0x48))
+		;
+
+	/*
+	 * Clear MMDC_CH1 mask bit.
+	 */
+	reg = readl_relaxed(ccm_base + 0x4);
+	reg &= ~(1 << 16);
+	writel_relaxed(reg, ccm_base + 0x4);
+
+}
+
 static void __init imx6q_clocks_init(struct device_node *ccm_node)
 {
 	struct device_node *np;
 	void __iomem *base;
 	int i, irq;
 	int ret;
+	u32 reg;
 
 	clk[dummy] = imx_clk_fixed("dummy", 0);
 	clk[ckil] = imx_obtain_fixed_clock("ckil", 0);
 	clk[ckih] = imx_obtain_fixed_clock("ckih1", 0);
 	clk[osc] = imx_obtain_fixed_clock("osc", 0);
+	/* Clock source from external clock via ANACLK1/2 PADs */
+	clk[anaclk1] = imx_obtain_fixed_clock("anaclk1", 0);
+	clk[anaclk2] = imx_obtain_fixed_clock("anaclk2", 0);
 
 	np = of_find_compatible_node(NULL, NULL, "fsl,imx6q-anatop");
-	base = of_iomap(np, 0);
+	anatop_base = base = of_iomap(np, 0);
 	WARN_ON(!base);
 
 	/* Audio/video PLL post dividers do not work on i.MX6q revision 1.0 */
@@ -170,13 +286,15 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	clk[pll1_sys]      = imx_clk_pllv3(IMX_PLLV3_SYS,	"pll1_sys",	"osc", base,        0x7f, false);
 	clk[pll2_bus]      = imx_clk_pllv3(IMX_PLLV3_GENERIC,	"pll2_bus",	"osc", base + 0x30, 0x1, false);
 	clk[pll3_usb_otg]  = imx_clk_pllv3(IMX_PLLV3_USB,	"pll3_usb_otg",	"osc", base + 0x10, 0x3, false);
-	clk[pll4_audio]    = imx_clk_pllv3(IMX_PLLV3_AV,	"pll4_audio",	"osc", base + 0x70, 0x7f, false);
+	clk[pll4_audio]    = imx_clk_pllv3(IMX_PLLV3_AV,	"pll4_audio",	"pll4_sel", base + 0x70, 0x7f, false);
 	clk[pll5_video]    = imx_clk_pllv3(IMX_PLLV3_AV,	"pll5_video",	"osc", base + 0xa0, 0x7f, false);
 	clk[pll6_enet]     = imx_clk_pllv3(IMX_PLLV3_ENET,	"pll6_enet",	"osc", base + 0xe0, 0x3, false);
 	clk[pll7_usb_host] = imx_clk_pllv3(IMX_PLLV3_USB,	"pll7_usb_host",	"osc", base + 0x20, 0x3, false);
 
 	/*                              name            reg       shift width parent_names     num_parents */
 	clk[lvds1_sel]    = imx_clk_mux("lvds1_sel",    base + 0x160, 0,  5,  lvds_sels,       ARRAY_SIZE(lvds_sels));
+	clk[lvds2_sel]    = imx_clk_mux("lvds2_sel",    base + 0x160, 5,  5,  lvds_sels,       ARRAY_SIZE(lvds_sels));
+	clk[pll4_sel]     = imx_clk_mux("pll4_sel",     base + 0x70, 14,  2,  pll_av_sels,     ARRAY_SIZE(pll_av_sels));
 
 	/*
 	 * Bit 20 is the reserved and read-only bit, we do this only for:
@@ -196,9 +314,11 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 
 	clk[sata_ref] = imx_clk_fixed_factor("sata_ref", "pll6_enet", 1, 5);
 	clk[pcie_ref] = imx_clk_fixed_factor("pcie_ref", "pll6_enet", 1, 4);
-	/* NOTICE: The gate of the lvds1 in/out is used to select the clk direction */
-	clk[lvds1_in] = imx_clk_gate("lvds1_in", NULL, base + 0x160, 12);
+	/* NOTICE: The gate of the lvds1/2 in/out is used to select the clk direction */
+	clk[lvds1_in] = imx_clk_gate("lvds1_in", "anaclk1", base + 0x160, 12);
+	clk[lvds2_in] = imx_clk_gate("lvds2_in", "anaclk2", base + 0x160, 13);
 	clk[lvds1_out] = imx_clk_gate("lvds1_out", "lvds1_sel", base + 0x160, 10);
+	clk[lvds2_out] = imx_clk_gate("lvds2_out", "lvds2_sel", base + 0x160, 11);
 
 	clk[sata_ref_100m] = imx_clk_gate("sata_ref_100m", "sata_ref", base + 0xe0, 20);
 	clk[pcie_ref_125m] = imx_clk_gate("pcie_ref_125m", "pcie_ref", base + 0xe0, 19);
@@ -231,7 +351,7 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	clk[pll5_video_div] = clk_register_divider_table(NULL, "pll5_video_div", "pll5_post_div", CLK_SET_RATE_PARENT, base + 0x170, 30, 2, 0, video_div_table, &imx_ccm_lock);
 
 	np = ccm_node;
-	base = of_iomap(np, 0);
+	ccm_base = base = of_iomap(np, 0);
 	WARN_ON(!base);
 	imx6_pm_set_ccm_base(base);
 
@@ -298,7 +418,7 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	clk[asrc_podf]        = imx_clk_divider("asrc_podf",        "asrc_pred",         base + 0x30, 9,  3);
 	clk[spdif_pred]       = imx_clk_divider("spdif_pred",       "spdif_sel",         base + 0x30, 25, 3);
 	clk[spdif_podf]       = imx_clk_divider("spdif_podf",       "spdif_pred",        base + 0x30, 22, 3);
-	clk[can_root]         = imx_clk_divider("can_root",         "pll3_60m",		 base + 0x20, 2,  6);
+	clk[can_root]         = imx_clk_divider("can_root",         "pll3_60m",          base + 0x20, 2,  6);
 	clk[ecspi_root]       = imx_clk_divider("ecspi_root",       "pll3_60m",          base + 0x38, 19, 6);
 	clk[gpu2d_core_podf]  = imx_clk_divider("gpu2d_core_podf",  "gpu2d_core_sel",    base + 0x18, 23, 3);
 	clk[gpu3d_core_podf]  = imx_clk_divider("gpu3d_core_podf",  "gpu3d_core_sel",    base + 0x18, 26, 3);
@@ -464,6 +584,25 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	writel_relaxed(1 << CCM_CCGR_OFFSET(0), base + 0x7c);
 	writel_relaxed(0, base + 0x80);
 
+	/* Make sure PFDs are disabled at boot. */
+	reg = readl_relaxed(anatop_base + 0x100);
+	/* Cannot disable pll2_pfd2_396M, as it is the MMDC clock in iMX6DL */
+	if (cpu_is_imx6dl())
+		reg |= 0x80008080;
+	else
+		reg |= 0x80808080;
+	writel_relaxed(reg, anatop_base + 0x100);
+
+	/* Disable PLL3 PFDs. */
+	reg = readl_relaxed(anatop_base + 0xF0);
+	reg |= 0x80808080;
+	writel_relaxed(reg, anatop_base + 0xF0);
+
+	/* Make sure PLLs is disabled */
+	reg = readl_relaxed(anatop_base + 0xA0);
+	reg &= ~(1 << 13);
+	writel_relaxed(reg, anatop_base + 0xA0);
+
 	clk_data.clks = clk;
 	clk_data.clk_num = ARRAY_SIZE(clk);
 	of_clk_add_provider(np, of_clk_src_onecell_get, &clk_data);
@@ -475,13 +614,10 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	clk_register_clkdev(clk[ahb], "ahb", NULL);
 	clk_register_clkdev(clk[cko1], "cko1", NULL);
 	clk_register_clkdev(clk[arm], NULL, "cpu0");
-	clk_register_clkdev(clk[pll4_post_div], "pll4_post_div", NULL);
-	clk_register_clkdev(clk[pll4_audio], "pll4_audio", NULL);
-
-	if ((imx_get_soc_revision() != IMX_CHIP_REVISION_1_0) || cpu_is_imx6dl()) {
-		clk_set_parent(clk[ldb_di0_sel], clk[pll5_video_div]);
-		clk_set_parent(clk[ldb_di1_sel], clk[pll5_video_div]);
-	}
+	clk_register_clkdev(clk[pll4_audio_div], "pll4_audio_div", NULL);
+	clk_register_clkdev(clk[pll4_sel], "pll4_sel", NULL);
+	clk_register_clkdev(clk[lvds2_in], "lvds2_in", NULL);
+	clk_register_clkdev(clk[esai], "esai", NULL);
 
 	/*
 	 * The gpmi needs 100MHz frequency in the EDO/Sync mode,
@@ -495,7 +631,6 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 		pr_err("Failed to set PCIe bus parent clk.\n");
 	if (clk_set_parent(clk[pcie_axi_sel], clk[axi]))
 		pr_err("Failed to set PCIe parent clk.\n");
-
 
 	/* gpu clock initilazation */
 	clk_set_parent(clk[gpu3d_shader_sel], clk[pll2_pfd1_594m]);
@@ -513,8 +648,7 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	}
 
 	/* ipu clock initialization */
-	clk_set_parent(clk[ldb_di0_sel], clk[pll2_pfd0_352m]);
-	clk_set_parent(clk[ldb_di1_sel], clk[pll2_pfd0_352m]);
+	init_ldb_clks(pll2_pfd0_352m);
 	clk_set_parent(clk[ipu1_di0_pre_sel], clk[pll5_video_div]);
 	clk_set_parent(clk[ipu1_di1_pre_sel], clk[pll5_video_div]);
 	clk_set_parent(clk[ipu2_di0_pre_sel], clk[pll5_video_div]);
@@ -549,6 +683,7 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	clk_set_parent(clk[ssi1_sel], clk[pll4_audio_div]);
 	clk_set_parent(clk[ssi2_sel], clk[pll4_audio_div]);
 	clk_set_parent(clk[ssi3_sel], clk[pll4_audio_div]);
+	clk_set_parent(clk[esai_sel], clk[pll4_audio_div]);
 	clk_set_parent(clk[spdif_sel], clk[pll3_pfd3_454m]);
 	clk_set_parent(clk[asrc_sel], clk[pll3_usb_otg]);
 	clk_set_rate(clk[asrc_sel], 7500000);

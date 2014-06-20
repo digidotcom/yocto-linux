@@ -736,22 +736,27 @@ _AllocateMemory_Retry:
                     gctUINT32 physAddr=0;
                     gctUINT32 baseAddress = 0;
 
-                    gckOS_LockPages(Kernel->os,
-                                    node->Virtual.physical,
-                                    node->Virtual.bytes,
-                                    gcvFALSE,
-                                    &node->Virtual.logical,
-                                    &node->Virtual.pageCount);
+                    gcmkONERROR(
+                        gckOS_LockPages(Kernel->os,
+                                        node->Virtual.physical,
+                                        node->Virtual.bytes,
+                                        gcvFALSE,
+                                        &node->Virtual.logical,
+                                        &node->Virtual.pageCount));
 
                     /* Convert logical address into a physical address. */
-                    gckOS_GetPhysicalAddress(Kernel->os, node->Virtual.logical, &physAddr);
+                    gcmkONERROR(
+                        gckOS_GetPhysicalAddress(Kernel->os,
+                                                 node->Virtual.logical,
+                                                 &physAddr));
 
-                    gckOS_UnlockPages(Kernel->os,
-                                      node->Virtual.physical,
-                                      node->Virtual.bytes,
-                                      node->Virtual.logical);
+                    gcmkONERROR(
+                        gckOS_UnlockPages(Kernel->os,
+                                          node->Virtual.physical,
+                                          node->Virtual.bytes,
+                                          node->Virtual.logical));
 
-                    gckOS_GetBaseAddress(Kernel->os, &baseAddress);
+                    gcmkONERROR(gckOS_GetBaseAddress(Kernel->os, &baseAddress));
 
                     gcmkASSERT(physAddr >= baseAddress);
 
@@ -760,9 +765,9 @@ _AllocateMemory_Retry:
 
                     if((physAddr & 0x80000000) || ((physAddr + Bytes) & 0x80000000))
                     {
-                        gckOS_Print("gpu virtual memory 0x%x cannot be allocated for external use !\n", physAddr);
+                        gckOS_Print("gpu virtual memory 0x%x cannot be allocated in force contiguous request!\n", physAddr);
 
-                        gckVIDMEM_Free(node);
+                        gcmkONERROR(gckVIDMEM_Free(node));
 
                         node = gcvNULL;
                     }
@@ -933,6 +938,7 @@ gckKERNEL_Dispatch(
 #if !USE_NEW_LINUX_SIGNAL
     gctSIGNAL   signal;
 #endif
+    gceSURF_TYPE type;
 
     gcmkHEADER_ARG("Kernel=0x%x FromUser=%d Interface=0x%x",
                    Kernel, FromUser, Interface);
@@ -1169,6 +1175,8 @@ gckKERNEL_Dispatch(
         break;
 
     case gcvHAL_ALLOCATE_LINEAR_VIDEO_MEMORY:
+        type = Interface->u.AllocateLinearVideoMemory.type;
+
         /* Allocate memory. */
         gcmkONERROR(
             _AllocateMemory(Kernel,
@@ -1181,10 +1189,39 @@ gckKERNEL_Dispatch(
         if (node->VidMem.memory->object.type == gcvOBJ_VIDMEM)
         {
             bytes = node->VidMem.bytes;
+            node->VidMem.type = type;
+
+            gcmkONERROR(
+                gckKERNEL_AddProcessDB(Kernel,
+                                   processID, gcvDB_VIDEO_MEMORY_RESERVED,
+                                   node,
+                                   gcvNULL,
+                                   bytes));
         }
         else
         {
             bytes = node->Virtual.bytes;
+            node->Virtual.type = type;
+
+            if(node->Virtual.contiguous)
+            {
+                gcmkONERROR(
+                    gckKERNEL_AddProcessDB(Kernel,
+                                   processID, gcvDB_VIDEO_MEMORY_CONTIGUOUS,
+                                   node,
+                                   gcvNULL,
+                                   bytes));
+            }
+            else
+            {
+                gcmkONERROR(
+                    gckKERNEL_AddProcessDB(Kernel,
+                                   processID, gcvDB_VIDEO_MEMORY_VIRTUAL,
+                                   node,
+                                   gcvNULL,
+                                   bytes));
+            }
+
         }
 
         gcmkONERROR(
@@ -1220,6 +1257,28 @@ gckKERNEL_Dispatch(
             gckKERNEL_RemoveProcessDB(Kernel,
                                       processID, gcvDB_VIDEO_MEMORY,
                                       node));
+
+        if (node->VidMem.memory->object.type == gcvOBJ_VIDMEM)
+        {
+           gcmkONERROR(
+                gckKERNEL_RemoveProcessDB(Kernel,
+                                      processID, gcvDB_VIDEO_MEMORY_RESERVED,
+                                      node));
+        }
+        else if(node->Virtual.contiguous)
+        {
+            gcmkONERROR(
+                gckKERNEL_RemoveProcessDB(Kernel,
+                                      processID, gcvDB_VIDEO_MEMORY_CONTIGUOUS,
+                                      node));
+        }
+        else
+        {
+            gcmkONERROR(
+                gckKERNEL_RemoveProcessDB(Kernel,
+                                      processID, gcvDB_VIDEO_MEMORY_VIRTUAL,
+                                      node));
+        }
 
         break;
 
@@ -1467,12 +1526,12 @@ gckKERNEL_Dispatch(
                         if (hardware)
                         {
                             /* This signal is bound to a hardware,
-                            ** so the timeout is limited by gcdGPU_TIMEOUT.
+                            ** so the timeout is limited by Kernel->timeOut.
                             */
                             timer += gcdGPU_ADVANCETIMER;
                         }
 
-                        if (timer >= gcdGPU_TIMEOUT)
+                        if (timer >= Kernel->timeOut)
                         {
                             gcmkONERROR(
                                 gckOS_Broadcast(Kernel->os,
@@ -1896,6 +1955,33 @@ gckKERNEL_Dispatch(
                                      !Interface->u.Database.validProcessID,
                                      gcvDB_IDLE,
                                      &Interface->u.Database.gpuIdle));
+        break;
+
+    case gcvHAL_VIDMEM_DATABASE:
+        /* Query reserved video memory. */
+        gcmkONERROR(
+            gckKERNEL_QueryProcessDB(Kernel,
+                                     Interface->u.VidMemDatabase.processID,
+                                     !Interface->u.VidMemDatabase.validProcessID,
+                                     gcvDB_VIDEO_MEMORY_RESERVED,
+                                     &Interface->u.VidMemDatabase.vidMemResv));
+
+        /* Query contiguous video memory. */
+        gcmkONERROR(
+            gckKERNEL_QueryProcessDB(Kernel,
+                                     Interface->u.VidMemDatabase.processID,
+                                     !Interface->u.VidMemDatabase.validProcessID,
+                                     gcvDB_VIDEO_MEMORY_CONTIGUOUS,
+                                     &Interface->u.VidMemDatabase.vidMemCont));
+
+        /* Query virtual video memory. */
+        gcmkONERROR(
+            gckKERNEL_QueryProcessDB(Kernel,
+                                     Interface->u.VidMemDatabase.processID,
+                                     !Interface->u.VidMemDatabase.validProcessID,
+                                     gcvDB_VIDEO_MEMORY_VIRTUAL,
+                                     &Interface->u.VidMemDatabase.vidMemVirt));
+
         break;
 
     case gcvHAL_VERSION:

@@ -250,23 +250,6 @@ static int mxs_lradc_read_single(struct iio_dev *iio_dev,
 	struct mxs_lradc *lradc = iio_priv(iio_dev);
 	int ret;
 
-	if (m != IIO_CHAN_INFO_RAW)
-		return -EINVAL;
-
-	/* Check for invalid channel */
-	if (chan->channel > LRADC_MAX_TOTAL_CHANS)
-		return -EINVAL;
-
-	/*
-	 * See if there is no buffered operation in progess. If there is, simply
-	 * bail out. This can be improved to support both buffered and raw IO at
-	 * the same time, yet the code becomes horribly complicated. Therefore I
-	 * applied KISS principle here.
-	 */
-	ret = mutex_trylock(&lradc->lock);
-	if (!ret)
-		return -EBUSY;
-
 	INIT_COMPLETION(lradc->completion);
 
 	/*
@@ -1192,6 +1175,10 @@ static int mxs_lradc_probe(struct platform_device *pdev)
 	/* Configure the hardware. */
 	mxs_lradc_hw_init(lradc);
 
+#ifdef CONFIG_PM_SLEEP
+	device_set_wakeup_capable(&pdev->dev, 1);
+#endif
+
 	/* Register the touchscreen input device. */
 	ret = mxs_lradc_ts_register(lradc);
 	if (ret)
@@ -1234,10 +1221,61 @@ static int mxs_lradc_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int mxs_lradc_suspend(struct device *dev)
+{
+	struct iio_dev *iio = dev_get_drvdata(dev);
+	struct mxs_lradc *lradc = iio_priv(iio);
+	const struct of_device_id *of_id =
+		of_match_device(mxs_lradc_dt_ids, dev);
+	const struct mxs_lradc_of_config *of_cfg =
+		&mxs_lradc_of_config[(enum mxs_lradc_id)of_id->data];
+	int i;
+
+	/* Enable touchscreen wakeup irq before suspending,
+	 * if device can wakeup */
+	if (device_may_wakeup(dev)) {
+		for (i = 0; i < of_cfg->irq_count; i++) {
+			if (!strcmp(of_cfg->irq_name[i],
+				    "mxs-lradc-touchscreen"))
+				return enable_irq_wake(lradc->irq[i]);
+		}
+	}
+
+	return 0;
+}
+
+static int mxs_lradc_resume(struct device *dev)
+{
+	struct iio_dev *iio = dev_get_drvdata(dev);
+	struct mxs_lradc *lradc = iio_priv(iio);
+	const struct of_device_id *of_id =
+		of_match_device(mxs_lradc_dt_ids, dev);
+	const struct mxs_lradc_of_config *of_cfg =
+		&mxs_lradc_of_config[(enum mxs_lradc_id)of_id->data];
+	int i;
+
+	/* Disable touchscreen wakeup irq before suspending,
+	 * if device can wakeup */
+	if (device_may_wakeup(dev)) {
+		for (i = 0; i < of_cfg->irq_count; i++) {
+			if (!strcmp(of_cfg->irq_name[i],
+				    "mxs-lradc-touchscreen"))
+				return disable_irq_wake(lradc->irq[i]);
+		}
+	}
+
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(mxs_lradc_pm_ops, mxs_lradc_suspend, mxs_lradc_resume);
+
 static struct platform_driver mxs_lradc_driver = {
 	.driver	= {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
+		.pm	= &mxs_lradc_pm_ops,
 		.of_match_table = mxs_lradc_dt_ids,
 	},
 	.probe	= mxs_lradc_probe,

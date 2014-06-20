@@ -30,7 +30,7 @@
 	};
 
 	clocks {
-		codec_osc: codec_osc {
+		codec_osc: anaclk2 {
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
 			clock-frequency = <24576000>;
@@ -41,37 +41,45 @@
 		compatible = "gpio-keys";
 		home {
 			label = "Home";
-			gpios = <&gpio1 11 0>;
+			gpios = <&gpio1 11 1>;
 			linux,code = <102>; /* KEY_HOME */
 			gpio-key,wakeup;
 		};
 
 		back {
 			label = "Back";
-			gpios = <&gpio1 12 0>;
+			gpios = <&gpio1 12 1>;
 			linux,code = <158>; /* KEY_BACK */
 			gpio-key,wakeup;
 		};
 
 		program {
 			label = "Program";
-			gpios = <&gpio2 12 0>;
+			gpios = <&gpio2 12 1>;
 			linux,code = <362>; /* KEY_PROGRAM */
 			gpio-key,wakeup;
 		};
 
 		volume-up {
 			label = "Volume Up";
-			gpios = <&gpio2 15 0>;
+			gpios = <&gpio2 15 1>;
 			linux,code = <115>; /* KEY_VOLUMEUP */
 			gpio-key,wakeup;
 		};
 
 		volume-down {
 			label = "Volume Down";
-			gpios = <&gpio5 14 0>;
+			gpios = <&gpio5 14 1>;
 			linux,code = <114>; /* KEY_VOLUMEDOWN */
 			gpio-key,wakeup;
+		};
+	};
+
+	hannstar_cabc {
+		compatible = "hannstar,cabc";
+
+		lvds_share {
+			gpios = <&max7310_a 0 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -193,6 +201,17 @@
 			regulator-max-microvolt = <3300000>;
 			regulator-always-on;
 		};
+
+		reg_sd3_vmmc: sd3_vmmc{
+			compatible = "regulator-fixed";
+			regulator-name = "P3V3_SDa_SWITCHED";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			gpio = <&gpio7 8 GPIO_ACTIVE_HIGH>;
+			enable-active-high;
+			/* remove below line to enable this regulator */
+			status="disabled";
+		};
 	};
 
 	sound-cs42888 {
@@ -238,14 +257,6 @@
 		status = "okay";
 	};
 
-	v4l2_cap_1 {
-		compatible = "fsl,imx6q-v4l2-capture";
-		ipu_id = <0>;
-		csi_id = <1>;
-		mclk_source = <0>;
-		status = "okay";
-	};
-
 	v4l2_out {
 		compatible = "fsl,mxc_v4l2_output";
 		status = "okay";
@@ -262,7 +273,7 @@
 	fsl,spi-num-chipselects = <1>;
 	cs-gpios = <&gpio3 19 0>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_ecspi1_1>;
+	pinctrl-0 = <&pinctrl_ecspi1_1 &pinctrl_ecspi1_cs_1>;
 
 	flash: m25p80@0 {
 		#address-cells = <1>;
@@ -530,7 +541,7 @@
 	hog {
 		pinctrl_hog: hoggrp {
 			fsl,pins = <
-				MX6QDL_PAD_NANDF_CS2__GPIO6_IO15 0x80000000
+				MX6QDL_PAD_NANDF_CS2__GPIO6_IO15 0x1f059
 				MX6QDL_PAD_SD2_DAT2__GPIO1_IO13  0x80000000
 				MX6QDL_PAD_EIM_A24__GPIO5_IO04   0x80000000
 				MX6QDL_PAD_SD2_DAT0__GPIO1_IO15  0x80000000
@@ -545,6 +556,7 @@
 				MX6QDL_PAD_GPIO_18__SD3_VSELECT	0x17059
 				MX6QDL_PAD_CSI0_DATA_EN__GPIO5_IO20 0x17059
 				MX6QDL_PAD_GPIO_1__GPIO1_IO01 0x17059
+				MX6QDL_PAD_SD3_RST__GPIO7_IO08 0x80000000
 			>;
 		};
 	};
@@ -575,14 +587,6 @@
 	sec_ipu_id = <1>;
 	sec_disp_id = <1>;
 	status = "okay";
-};
-
-&mipi_csi {
-	status = "okay";
-	ipu_id = <0>;
-	csi_id = <1>;
-	v_channel = <0>;
-	lanes = <1>;
 };
 
 &mlb {
@@ -652,6 +656,8 @@
 	cd-gpios = <&gpio1 1 0>;
 	wp-gpios = <&gpio5 20 0>;
 	no-1-8-v;
+	keep-power-in-suspend;
+	enable-sdio-wakeup;
 	status = "okay";
 };
 
@@ -662,6 +668,20 @@
 	pinctrl-2 = <&pinctrl_usdhc3_1_200mhz>;
 	cd-gpios = <&gpio6 15 0>;
 	wp-gpios = <&gpio1 13 0>;
+	/*
+	 * Due to board issue, we can not use external regulator for card slot
+	 * by default since the card power is shared with card detect pullup.
+	 * Disabling the vmmc regulator will cause unexpected card detect
+	 * interrupts.
+	 * HW rework is needed to fix this isssue. Remove R695 first, then you
+	 * can open below line to enable the using of external regulator.
+	 * Then you will be able to power off the card during suspend. This is
+	 * especially needed for a SD3.0 card re-enumeration working on UHS mode
+	 * Note: reg_sd3_vmmc is also need to be enabled
+	 */
+	/* vmmc-supply = <&reg_sd3_vmmc>; */
+	keep-power-in-suspend;
+	enable-sdio-wakeup;
 	status = "okay";
 };
 
