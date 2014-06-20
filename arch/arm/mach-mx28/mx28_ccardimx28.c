@@ -369,16 +369,12 @@ static void __init mx28_ccardimx28_init_pwm_leds(void)
 
 #if defined(CONFIG_MXS_PWM) || defined(CONFIG_MXS_PWM_MODULE)
 static struct mxs_pwm_channel mx28_pwm_channels[] = {
-#if defined(CONFIG_CCARDIMX28_PWM_CH0)
 	{
 		.channel = 0,
 	},
-#endif /* CONFIG_CCARDIMX28_PWM_CH0 */
-#if defined(CONFIG_CCARDIMX28_PWM_CH1)
 	{
 		.channel = 1,
 	},
-#endif
 };
 
 /* This structure will be initialized in the init function (see below) */

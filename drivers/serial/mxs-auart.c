@@ -825,7 +825,7 @@ static unsigned int mxs_auart_tx_empty(struct uart_port *u)
 {
 	struct mxs_auart_port *s = to_auart_port(u);
 
-	if (s->flags & MXS_AUART_PORT_DMA_MODE)
+	if ((s->flags & MXS_AUART_PORT_DMA_MODE) && s->tx)
 		return mxs_dma_desc_pending(s->tx) ? 0 : TIOCSER_TEMT;
 
 	if (__raw_readl(u->membase + HW_UARTAPP_STAT) &

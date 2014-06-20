@@ -214,7 +214,7 @@ config CCARDIMX28_SPI_SSP3_ENABLE
 endmenu
 
 menu "PWM options"
-	depends on (MXS_PWM || MXS_PWM_MODULE) && MODULE_CCARDXMX28
+	depends on (MXS_PWM || MXS_PWM_MODULE) && MODULE_CCARDIMX28
 
 config CCARDIMX28_PWM_CH0
 	bool "Enable PWM0"
