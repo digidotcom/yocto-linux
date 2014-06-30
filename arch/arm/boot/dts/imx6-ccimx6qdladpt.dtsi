@@ -42,9 +42,9 @@
 		ssi-controller = <&ssi2>;
 		audio-codec = <&sgtl5000>;
 		audio-routing =
-                        "MIC_IN", "Mic Jack",
-                        "Mic Jack", "Mic Bias",
-                        "Headphone Jack", "HP_OUT";
+		"MIC_IN", "Mic Jack",
+		"Mic Jack", "Mic Bias",
+		"Headphone Jack", "HP_OUT";
 		mux-int-port = <2>;
 		mux-ext-port = <3>;
 	};
@@ -260,10 +260,10 @@
 };
 
 &i2c3 {
-        clock-frequency = <100000>;
-        pinctrl-names = "default";
-        pinctrl-0 = <&pinctrl_i2c3_2>;
-        status = "okay";
+	clock-frequency = <100000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c3_2>;
+	status = "okay";
 
 	hdmi: edid@50 {
 		compatible = "fsl,imx6-hdmi-i2c";
@@ -280,7 +280,7 @@
 
 	sgtl5000: codec@0a {
 		compatible = "fsl,sgtl5000";
-                reg = <0x0a>;
+		reg = <0x0a>;
 		clock-frequency = <13000000>;
 		VDDA-supply = <&bperi>;
 		VDDIO-supply = <&bperi>;
@@ -429,10 +429,10 @@
 };
 
 &usdhc1 {
-        pinctrl-names = "default";
-        pinctrl-0 = <&pinctrl_usdhc1_1>;
-        no-1-8-v;
-        status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usdhc1_1>;
+	no-1-8-v;
+	status = "okay";
 };
 
 &usdhc2 {
@@ -443,12 +443,12 @@
 };
 
 &usdhc4 {
-        pinctrl-names = "default";
-        pinctrl-0 = <&pinctrl_usdhc4_1>;
-        bus-width = <8>;
-        non-removable;
-        no-1-8-v;
-        status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usdhc4_1>;
+	bus-width = <8>;
+	non-removable;
+	no-1-8-v;
+	status = "okay";
 };
 
 &vpu {
