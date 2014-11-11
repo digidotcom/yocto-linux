@@ -610,11 +610,14 @@ int32_t ipu_init_channel(struct ipu_soc *ipu, ipu_channel_t channel, ipu_channel
 
 	mutex_lock(&ipu->mutex_lock);
 
-	/* Re-enable error interrupts every time a channel is initialized */
-	ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(5));
-	ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(6));
-	ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(9));
-	ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(10));
+	if (!of_machine_is_compatible("digi,ccimx6")) {
+		/* Re-enable error interrupts every time a channel is
+		 * initialized */
+		ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(5));
+		ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(6));
+		ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(9));
+		ipu_cm_write(ipu, 0xFFFFFFFF, IPU_INT_CTRL(10));
+	}
 
 	if (ipu->channel_init_mask & (1L << IPU_CHAN_ID(channel))) {
 		dev_warn(ipu->dev, "Warning: channel already initialized %d\n",
@@ -3059,6 +3062,70 @@ static int ipu_suspend(struct device *dev)
 
 	dev_dbg(dev, "ipu suspend.\n");
 	return 0;
+}
+
+char *ipu_pixelfmt_str(int pixel_fmt)
+{
+	switch (pixel_fmt) {
+	case IPU_PIX_FMT_RGB666:
+		return "IPU_PIX_FMT_RGB666";
+	case IPU_PIX_FMT_RGB565:
+		return "IPU_PIX_FMT_RGB565";
+	case IPU_PIX_FMT_BGR24:
+		return "IPU_PIX_FMT_BGR24";
+	case IPU_PIX_FMT_RGB24:
+		return "IPU_PIX_FMT_RGB24";
+	case IPU_PIX_FMT_GBR24:
+		return "IPU_PIX_FMT_GBR24";
+	case IPU_PIX_FMT_BGR32:
+		return "IPU_PIX_FMT_BGR32";
+	case IPU_PIX_FMT_BGRA32:
+		return "IPU_PIX_FMT_BGRA32";
+	case IPU_PIX_FMT_RGB32:
+		return "IPU_PIX_FMT_RGB32";
+	case IPU_PIX_FMT_RGBA32:
+		return "IPU_PIX_FMT_RGBA32";
+	case IPU_PIX_FMT_ABGR32:
+		return "IPU_PIX_FMT_ABGR32";
+	case IPU_PIX_FMT_LVDS666:
+		return "IPU_PIX_FMT_LVDS666";
+	case IPU_PIX_FMT_LVDS888:
+		return "IPU_PIX_FMT_LVDS888";
+	case IPU_PIX_FMT_YUYV:
+		return "IPU_PIX_FMT_YUYV";
+	case IPU_PIX_FMT_UYVY:
+		return "IPU_PIX_FMT_UYVY";
+	case IPU_PIX_FMT_YVYU:
+		return "IPU_PIX_FMT_YVYU";
+	case IPU_PIX_FMT_VYUY:
+		return "IPU_PIX_FMT_VYUY";
+	case IPU_PIX_FMT_Y41P:
+		return "IPU_PIX_FMT_Y41P";
+	case IPU_PIX_FMT_YUV444:
+		return "IPU_PIX_FMT_YUV444";
+	case IPU_PIX_FMT_VYU444:
+		return "IPU_PIX_FMT_VYU444";
+	case IPU_PIX_FMT_NV12:
+		return "IPU_PIX_FMT_NV12";
+	case IPU_PIX_FMT_GREY:
+		return "IPU_PIX_FMT_GREY";
+	case IPU_PIX_FMT_YVU410P:
+		return "IPU_PIX_FMT_YVU410P";
+	case IPU_PIX_FMT_YUV410P:
+		return "IPU_PIX_FMT_YUV410P";
+	case IPU_PIX_FMT_YVU420P:
+		return "IPU_PIX_FMT_YVU420P";
+	case IPU_PIX_FMT_YUV420P:
+		return "IPU_PIX_FMT_YUV420P";
+	case IPU_PIX_FMT_YUV420P2:
+		return "IPU_PIX_FMT_YUV420P2";
+	case IPU_PIX_FMT_YVU422P:
+		return "IPU_PIX_FMT_YVU422P";
+	case IPU_PIX_FMT_YUV422P:
+		return "IPU_PIX_FMT_YUV422P";
+	default:
+		return "";
+	}
 }
 
 static int ipu_resume(struct device *dev)

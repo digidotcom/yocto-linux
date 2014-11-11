@@ -43,6 +43,33 @@
 #include "cpuidle.h"
 #include "hardware.h"
 
+static int mx6q_board_version = -EINVAL;
+
+int mx6q_get_board_version(void)
+{
+	struct device_node *np = NULL;
+	const char *boardver_str;
+	char buf[4];
+
+	/* Only need to read the carrier board once */
+	if (mx6q_board_version > 0)
+		return mx6q_board_version;
+
+	np = of_find_compatible_node(NULL, NULL, "digi,ccimx6");
+	if (!np)
+		return -EPERM;
+
+	if (!of_property_read_string(np, "digi,carrierboard,version",
+				&boardver_str)) {
+		strncpy(buf, boardver_str, sizeof(buf));
+		if (!kstrtoint(boardver_str, 10, &mx6q_board_version))
+			pr_info("Board version: %d\n",
+					mx6q_board_version);
+	}
+	return mx6q_board_version;
+}
+EXPORT_SYMBOL(mx6q_get_board_version);
+
 static struct flexcan_platform_data flexcan_pdata[2];
 static int flexcan_en_gpio;
 static int flexcan_stby_gpio;
@@ -364,8 +391,7 @@ static inline void imx6q_enet_init(void)
 {
 	imx6_enet_mac_init("fsl,imx6q-fec");
 	imx6q_enet_phy_init();
-	if (!of_machine_is_compatible("digi,ccimx6adpt") &&
-		!of_machine_is_compatible("digi,ccimx6sbc"))
+	if (!of_machine_is_compatible("digi,ccimx6"))
 			imx6q_1588_init();
 }
 
@@ -376,6 +402,41 @@ static const struct of_dev_auxdata imx6q_auxdata_lookup[] __initconst = {
 	{ /* sentinel */ }
 };
 
+static void fixup_dt_audio_codec(void)
+{
+	if (mx6q_get_board_version() == 1) {
+		/* SBCv1 has the codec directly powered from DA9063_BPERI
+		 * without any controlling GPIO, while SBCv2 (default DT)
+		 * controls it with GPIO2_25 so it uses a fixed gpio regulator.
+		 */
+		struct device_node *regulator_np = NULL;
+		struct device_node *codec_np = NULL;
+		struct property *propVDDA = NULL;
+		struct property *propVDDIO = NULL;
+
+		regulator_np = of_find_node_by_name(NULL, "DA9063_BPERI");
+		if (!regulator_np)
+			return;
+
+		codec_np = of_find_compatible_node(NULL, NULL, "fsl,sgtl5000");
+		if (!codec_np)
+			return;
+
+		propVDDA = of_find_property(codec_np, "VDDA-supply", NULL);
+		if (!propVDDA)
+			return;
+
+		propVDDIO = of_find_property(codec_np, "VDDIO-supply", NULL);
+		if (!propVDDIO)
+			return;
+
+		*(phandle *)propVDDA->value =
+				be32_to_cpu(regulator_np->phandle);
+		*(phandle *)propVDDIO->value =
+				be32_to_cpu(regulator_np->phandle);
+	}
+}
+
 static void __init imx6q_init_machine(void)
 {
 	struct device *parent;
@@ -385,8 +446,12 @@ static void __init imx6q_init_machine(void)
 	if (parent == NULL)
 		pr_warn("failed to initialize soc device\n");
 
+	mx6q_get_board_version();
 	of_platform_populate(NULL, of_default_bus_match_table,
 					imx6q_auxdata_lookup, parent);
+
+	if (of_machine_is_compatible("digi,ccimx6sbc"))
+		fixup_dt_audio_codec();
 
 	imx6q_enet_init();
 	imx_anatop_init();

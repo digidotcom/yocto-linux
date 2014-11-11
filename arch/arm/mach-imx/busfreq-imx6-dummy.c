@@ -33,7 +33,7 @@
 void request_bus_freq(enum bus_freq_mode mode) {};
 EXPORT_SYMBOL(request_bus_freq);
 
-void release_bus_freq(enum bus_freq_mode mode) {};
+void release_bus_freq(enum bus_freq_mode mode){};
 EXPORT_SYMBOL(release_bus_freq);
 
 int high_bus_freq_mode;

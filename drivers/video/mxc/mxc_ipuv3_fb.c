@@ -875,9 +875,11 @@ static int mxcfb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 	    (var->bits_per_pixel != 8))
 		var->bits_per_pixel = 16;
 
-	if (check_var_pixfmt(var))
+	if (check_var_pixfmt(var)) {
 		/* Fall back to default */
 		bpp_to_var(var->bits_per_pixel, var);
+		dev_dbg(info->device, "Falling back to default pixel format\n");
+	}
 
 	if (var->pixclock < 1000) {
 		htotal = var->xres + var->right_margin + var->hsync_len +
@@ -1929,8 +1931,9 @@ static int mxcfb_dispdrv_init(struct platform_device *pdev,
 		/* setting */
 		mxcfbi->ipu_id = setting.dev_id;
 		mxcfbi->ipu_di = setting.disp_id;
-		dev_dbg(&pdev->dev, "di_pixfmt:0x%x, bpp:0x%x, di:%d, ipu:%d\n",
-				setting.if_fmt, setting.default_bpp,
+		dev_dbg(&pdev->dev, "di_pixfmt:%s, bpp:0x%x, di:%d, ipu:%d\n",
+				ipu_pixelfmt_str(setting.if_fmt),
+				setting.default_bpp,
 				setting.disp_id, setting.dev_id);
 	}
 
@@ -2425,11 +2428,8 @@ static int mxcfb_probe(struct platform_device *pdev)
 		mxcfbi->ipu_ch_nf_irq = IPU_IRQ_BG_SYNC_NFACK;
 		mxcfbi->ipu_alp_ch_irq = IPU_IRQ_BG_ALPHA_SYNC_EOF;
 		mxcfbi->ipu_ch = MEM_BG_SYNC;
-		/* Unblank the primary fb only by default */
-		if (pdev->id == 0)
-			mxcfbi->cur_blank = mxcfbi->next_blank = FB_BLANK_UNBLANK;
-		else
-			mxcfbi->cur_blank = mxcfbi->next_blank = FB_BLANK_POWERDOWN;
+		/* Unblank all framebuffers by default */
+		mxcfbi->cur_blank = mxcfbi->next_blank = FB_BLANK_UNBLANK;
 
 		ret = mxcfb_register(fbi);
 		if (ret < 0)
@@ -2467,10 +2467,7 @@ static int mxcfb_probe(struct platform_device *pdev)
 		mxcfbi->ipu_ch_nf_irq = IPU_IRQ_DC_SYNC_NFACK;
 		mxcfbi->ipu_alp_ch_irq = -1;
 		mxcfbi->ipu_ch = MEM_DC_SYNC;
-		if (of_machine_is_compatible("fsl,imx6q-sabresd"))
-			mxcfbi->cur_blank = mxcfbi->next_blank = FB_BLANK_UNBLANK;
-		else
-			mxcfbi->cur_blank = mxcfbi->next_blank = FB_BLANK_POWERDOWN;
+		mxcfbi->cur_blank = mxcfbi->next_blank = FB_BLANK_UNBLANK;
 
 		ret = mxcfb_register(fbi);
 		if (ret < 0)

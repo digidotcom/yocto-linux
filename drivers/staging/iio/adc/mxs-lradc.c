@@ -250,6 +250,23 @@ static int mxs_lradc_read_single(struct iio_dev *iio_dev,
 	struct mxs_lradc *lradc = iio_priv(iio_dev);
 	int ret;
 
+	if (m != IIO_CHAN_INFO_RAW)
+		return -EINVAL;
+
+	/* Check for invalid channel */
+	if (chan->channel > LRADC_MAX_TOTAL_CHANS)
+		return -EINVAL;
+
+	/*
+	 * See if there is no buffered operation in progess. If there is, simply
+	 * bail out. This can be improved to support both buffered and raw IO at
+	 * the same time, yet the code becomes horribly complicated. Therefore I
+	 * applied KISS principle here.
+	 */
+	ret = mutex_trylock(&lradc->lock);
+	if (!ret)
+		return -EBUSY;
+
 	INIT_COMPLETION(lradc->completion);
 
 	/*

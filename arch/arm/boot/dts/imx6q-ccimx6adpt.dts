@@ -11,7 +11,15 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+/dts-v1/;
+
+#include "imx6q.dtsi"
+
 / {
+	model = "Digi International ConnectCore 6 MX53 JSK adapter.";
+	compatible = "digi,ccimx6adpt", "digi,ccimx6", "fsl,imx6q";
+	digi,machine,name = "ccimx6adpt";
+
 	aliases {
 		mxcfb0 = &mxcfb1;
 		mxcfb1 = &mxcfb2;
@@ -23,28 +31,15 @@
 		reg = <0x10000000 0x40000000>;
 	};
 
-	battery: max8903@0 {
-		compatible = "fsl,max8903-charger";
-		pinctrl-names = "default";
-		dok_input = <&gpio2 24 1>;
-		uok_input = <&gpio1 27 1>;
-		chg_input = <&gpio3 23 1>;
-		flt_input = <&gpio5 2 1>;
-		fsl,dcm_always_high;
-		fsl,dc_valid;
-		fsl,usb_valid;
-		status = "okay";
-	};
-
 	sound {
 		compatible = "fsl,imx-audio-sgtl5000";
 		model = "sgtl5000-audio";
 		ssi-controller = <&ssi2>;
 		audio-codec = <&sgtl5000>;
 		audio-routing =
-		"MIC_IN", "Mic Jack",
-		"Mic Jack", "Mic Bias",
-		"Headphone Jack", "HP_OUT";
+			"MIC_IN", "Mic Jack",
+			"Mic Jack", "Mic Bias",
+			"Headphone Jack", "HP_OUT";
 		mux-int-port = <2>;
 		mux-ext-port = <3>;
 	};
@@ -58,16 +53,38 @@
 
 	mxcfb1: fb@0 {
 		compatible = "fsl,mxc_sdc_fb";
+		disp_dev = "ldb";
+		interface_pix_fmt = "RGB666";
+		mode_str ="LDB-HSD101PFW2";
+		default_bpp = <16>;
+		int_clk = <0>;
+		late_init = <0>;
+		status = "okay";
+	};
+
+	mxcfb2: fb@1 {
+		compatible = "fsl,mxc_sdc_fb";
 		disp_dev = "hdmi";
 		interface_pix_fmt = "RGB24";
 		mode_str ="1920x1080M@60";
 		default_bpp = <24>;
 		int_clk = <0>;
 		late_init = <0>;
-		status = "disabled";
+		status = "okay";
 	};
 
-	mxcfb2: fb@1 {
+	mxcfb3: fb@2 {
+		compatible = "fsl,mxc_sdc_fb";
+		disp_dev = "lcd";
+		interface_pix_fmt = "RGB24";
+		mode_str ="LQ070Y3DG3B";
+		default_bpp = <32>;
+		int_clk = <0>;
+		late_init = <0>;
+		status = "okay";
+	};
+
+	mxcfb4: fb@3 {
 		compatible = "fsl,mxc_sdc_fb";
 		disp_dev = "ldb";
 		interface_pix_fmt = "RGB666";
@@ -75,29 +92,7 @@
 		default_bpp = <16>;
 		int_clk = <0>;
 		late_init = <0>;
-		status = "disabled";
-	};
-
-	mxcfb3: fb@2 {
-		compatible = "fsl,mxc_sdc_fb";
-		disp_dev = "lcd";
-		interface_pix_fmt = "RGB565";
-		mode_str ="CLAA-WVGA";
-		default_bpp = <16>;
-		int_clk = <0>;
-		late_init = <0>;
-		status = "disabled";
-	};
-
-	mxcfb4: fb@3 {
-		compatible = "fsl,mxc_sdc_fb";
-		disp_dev = "ldb";
-		interface_pix_fmt = "RGB666";
-		mode_str ="LDB-XGA";
-		default_bpp = <16>;
-		int_clk = <0>;
-		late_init = <0>;
-		status = "disabled";
+		status = "okay";
 	};
 
 	lcd@0 {
@@ -106,11 +101,43 @@
 		disp_id = <0>;
 		default_ifmt = "RGB565";
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_ipu1_1>;
-		status = "disabled";
+		pinctrl-0 = <&pinctrl_ipu1_6>;
+		display = <&lq070y3dg3b>;
+		status = "okay";
 	};
 
-	/* MIPI camera */
+	lq070y3dg3b: LQ70Y3DG3B@0 {
+		display-timings {
+			timing {
+				clock-frequency = <18520000>;
+				hactive = <800>;
+				vactive = <480>;
+				hfront-porch = <50>;
+				hback-porch = <0>;
+				hsync-len = <128>;
+				vback-porch = <25>;
+				vfront-porch = <10>;
+				vsync-len = <10>;
+			};
+		};
+	};
+
+	fusion10: LDB-HSD101PFW2@0 {
+		display-timings {
+			timing {
+				clock-frequency = <45000000>;
+				hactive = <1024>;
+				vactive = <600>;
+				hfront-porch = <0>;
+				hback-porch = <0>;
+				hsync-len = <176>;
+				vback-porch = <0>;
+				vfront-porch = <2>;
+				vsync-len = <23>;
+			};
+		};
+	};
+
 	v4l2_cap_0 {
 		compatible = "fsl,imx6q-v4l2-capture";
 		ipu_id = <1>;
@@ -119,18 +146,6 @@
 		status = "okay";
 	};
 
-	/* Secondary parallel camera */
-/*
-	v4l2_cap_0 {
-		compatible = "fsl,imx6q-v4l2-capture";
-		ipu_id = <1>;
-		csi_id = <1>;
-		mclk_source = <0>;
-		status = "okay";
-	};
-*/
-
-	/* Primary parallel camera */
 	v4l2_cap_1 {
 		compatible = "fsl,imx6q-v4l2-capture";
 		ipu_id = <0>;
@@ -169,9 +184,9 @@
 };
 
 &cpu0 {
-	arm-supply = <&bcore1>;
-	soc-supply = <&bcore2>;
-	pu-supply = <&pu_dummy>;
+	arm-supply = <&reg_arm>;
+	soc-supply = <&reg_soc>;
+	pu-supply = <&reg_pu>;
 };
 
 &ecspi2 {
@@ -221,13 +236,13 @@
 	fsl,cpu_pupscr_sw = <0xf>;
 	fsl,cpu_pdnscr_iso2sw = <0x1>;
 	fsl,cpu_pdnscr_iso = <0x1>;
-	fsl,ldo-bypass = <1>; /* use ldo-bypass, u-boot will check it and configure */
-	fsl,wdog-reset = <2>; /* watchdog select of reset source */
-	pu-supply = <&pu_dummy>; /* ldo-bypass:use pu_dummy if VDDSOC share with VDDPU */
+	fsl,ldo-bypass = <0>; /* No ldo-bypass */
+	fsl,wdog-reset = <1>; /* watchdog select of reset source */
+	pu-supply = <&reg_pu>;
 };
 
 &gpu {
-	pu-supply = <&pu_dummy>; /* ldo-bypass:use pu_dummy if VDDSOC share with VDDPU */
+	pu-supply = <&reg_pu>;
 };
 
 &hdmi_audio {
@@ -252,14 +267,219 @@
 	status = "okay";
 };
 
+&ldb {
+	ipu_id = <0>;
+	disp_id = <0>;
+	ext_ref = <1>;
+	mode = "sep0";
+	sec_ipu_id = <0>;
+	sec_disp_id = <1>;
+	status = "okay";
+	display = <&fusion10>;
+	sec_display = <&fusion10>;
+};
+
 &i2c2 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c2_2>;
 	status = "okay";
+
+	pmic_dialog: dialog@58 {
+		compatible = "dlg,da9063";
+		reg = <0x58>;
+		interrupt-parent = <&gpio7>;
+		interrupts = <12 2>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_pmic_dialog>;
+
+		rtc {
+			compatible = "dlg,da9063-rtc";
+			interrupts = <1 2>;
+			interrupts-names = "ALARM" , "TIMER";
+			interrupt-parent = <&pmic_dialog>;
+		};
+
+		onkey {
+			compatible = "dlg,da9063-onkey";
+			interrupts = <0>;
+			interrupts-names = "ONKEY";
+			interrupt-parent = <&pmic_dialog>;
+			dlg,key-power;
+		};
+
+		hwmon {
+			compatible = "dlg,da9063-hwmon";
+			interrupts = <3>;
+			interrupts-names = "HWMON";
+			interrupt-parent = <&pmic_dialog>;
+			dlg,tjunc-offset = <(-5)>;
+		};
+
+		gpio_extender: gpio {
+			compatible = "dlg,da9063-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		leds {
+			compatible = "dlg,da9063-leds";
+
+			lvds0-backlight@0xc6 {
+				dlg,led-gpio-reg = <0x1c 0xf0>;
+				dlg,led-reg = <0xc8>;
+				linux,default-trigger = "backlight";
+			};
+
+			lvds1-backlight@0xc6 {
+				dlg,led-gpio-reg = <0x1a 0xf0>;
+				dlg,led-reg = <0xc6>;
+				linux,default-trigger = "backlight";
+			};
+		};
+
+		regulators {
+			compatible = "dlg,da9063-regulator";
+			interrupts = <8>;
+			interrupts-names = "LDO_LIM";
+			interrupt-parent = <&pmic_dialog>;
+
+			bcore1: DA9063_BCORE1 {
+				regulator-name = "DA9063_BCORE1";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-microvolt = <1377000>;
+				regulator-suspend-standby-microvolt = <1377000>;
+			};
+
+			bcore2: DA9063_BCORE2 {
+				regulator-name = "DA9063_BCORE2";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-microvolt = <1377000>;
+				regulator-suspend-standby-microvolt = <1377000>;
+			};
+
+			bpro: DA9063_BPRO {
+				regulator-name = "DA9063_BPRO";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			bmem: DA9063_BMEM {
+				regulator-name = "DA9063_BMEM";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-microvolt = <1500000>;
+				regulator-suspend-standby-microvolt = <1500000>;
+			};
+
+			bio: DA9063_BIO {
+				regulator-name = "DA9063_BIO";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			bperi: DA9063_BPERI {
+				regulator-name = "DA9063_BPERI";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-microvolt = <3300000>;
+				regulator-suspend-standby-microvolt = <3300000>;
+			};
+
+			ldo1: DA9063_LDO1 {
+				regulator-name = "DA9063_LDO1";
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			ldo2: DA9063_LDO2 {
+				regulator-name = "DA9063_LDO2";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			ldo3: DA9063_LDO3 {
+				regulator-name = "DA9063_LDO3";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-microvolt = <3300000>;
+				regulator-suspend-standby-microvolt = <3300000>;
+			};
+
+			ldo4: DA9063_LDO4 {
+				regulator-name = "DA9063_LDO4";
+				regulator-min-microvolt = <2500000>;
+				regulator-max-microvolt = <2500000>;
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			ldo5: DA9063_LDO5 {
+				regulator-name = "DA9063_LDO5";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-microvolt = <3000000>;
+				regulator-suspend-standby-microvolt = <3000000>;
+			};
+
+			ldo6: DA9063_LDO6 {
+				regulator-name = "DA9063_LDO6";
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			ldo7: DA9063_LDO7 {
+				regulator-name = "DA9063_LDO7";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			ldo8: DA9063_LDO8 {
+				regulator-name = "DA9063_LDO8";
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			ldo9: DA9063_LDO9 {
+				regulator-name = "DA9063_LDO9";
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			ldo10: DA9063_LDO10 {
+				regulator-name = "DA9063_LDO10";
+				regulator-suspend-mem-disabled;
+				regulator-suspend-standby-disabled;
+			};
+
+			ldo11: DA9063_LDO11 {
+				regulator-name = "DA9063_LDO11";
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-suspend-mem-microvolt = <2800000>;
+				regulator-suspend-standby-microvolt = <2800000>;
+			};
+
+			out_32k: DA9063_32K_OUT {
+				regulator-name = "DA9063_32K_OUT";
+			};
+		};
+	};
 };
 
-&i2c3 {
+&i2c3	 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c3_2>;
@@ -339,6 +559,14 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog_1>;
 
+	pmic_dialog {
+		pinctrl_pmic_dialog: pmic_dialoggrp {
+			fsl,pins = <
+				MX6QDL_PAD_GPIO_17__GPIO7_IO12 0x1b0b0
+			>;
+		};
+	};
+
 	hog {
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
@@ -401,6 +629,7 @@
 &uart1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart1_2>;
+	fsl,uart-has-rtscts;
 	status = "okay";
 };
 
@@ -414,6 +643,7 @@
 &uart5 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart5_1>;
+	fsl,uart-has-rtscts;
 	status = "okay";
 };
 
@@ -429,28 +659,56 @@
 };
 
 &usdhc1 {
-	pinctrl-names = "default";
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
 	pinctrl-0 = <&pinctrl_usdhc1_1>;
+	pinctrl-1 = <&pinctrl_usdhc1_1_100mhz>;
+	pinctrl-2 = <&pinctrl_usdhc1_1_200mhz>;
 	no-1-8-v;
+	keep-power-in-suspend;
+	enable-sdio-wakeup;
 	status = "okay";
 };
 
 &usdhc2 {
-	pinctrl-names = "default";
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
 	pinctrl-0 = <&pinctrl_usdhc2_2>;
+	pinctrl-1 = <&pinctrl_usdhc2_2_100mhz>;
+	pinctrl-2 = <&pinctrl_usdhc2_2_200mhz>;
+	broken-cd;
 	no-1-8-v;
+	keep-power-in-suspend;
+	enable-sdio-wakeup;
 	status = "okay";
 };
 
 &usdhc4 {
-	pinctrl-names = "default";
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
 	pinctrl-0 = <&pinctrl_usdhc4_1>;
+	pinctrl-1 = <&pinctrl_usdhc4_1_100mhz>;
+	pinctrl-2 = <&pinctrl_usdhc4_1_200mhz>;
 	bus-width = <8>;
 	non-removable;
 	no-1-8-v;
+	keep-power-in-suspend;
+	status = "okay";
+};
+
+&flexcan1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_flexcan1_1>;
+	status = "okay";
+};
+
+&flexcan2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_flexcan2_1>;
+	status = "okay";
+};
+
+&sata {
 	status = "okay";
 };
 
 &vpu {
-	pu-supply = <&pu_dummy>; /* ldo-bypass:use pu_dummy if VDDSOC share with VDDPU */
+	pu-supply = <&reg_pu>;
 };

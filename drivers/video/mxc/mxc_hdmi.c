@@ -1867,6 +1867,7 @@ static void mxc_hdmi_set_mode(struct mxc_hdmi *hdmi)
 	const struct fb_videomode *mode;
 	struct fb_videomode m;
 	struct fb_var_screeninfo var;
+	bool show_logo = !hdmi->dft_mode_set;
 
 	dev_dbg(&hdmi->pdev->dev, "%s\n", __func__);
 
@@ -1900,6 +1901,12 @@ static void mxc_hdmi_set_mode(struct mxc_hdmi *hdmi)
 		fb_videomode_to_var(&hdmi->fbi->var, mode);
 		dump_fb_videomode((struct fb_videomode *)mode);
 		mxc_hdmi_notify_fb(hdmi);
+#if defined(CONFIG_LOGO)
+		/* Show logo only once and only if user space has not
+		 * yet used the framebuffer to avoid race conditions */
+		if (show_logo && (atomic_read(&hdmi->fbi->count) == 1))
+			fb_show_logo(hdmi->fbi, 0);
+#endif
 	}
 
 }
@@ -2436,6 +2443,58 @@ static void hdmi_get_of_property(struct mxc_hdmi *hdmi)
 
 }
 
+static int valid_mode(int pixel_fmt)
+{
+	return ((pixel_fmt == IPU_PIX_FMT_RGB24) ||
+		(pixel_fmt == IPU_PIX_FMT_BGR24) ||
+		(pixel_fmt == IPU_PIX_FMT_GBR24) ||
+		(pixel_fmt == IPU_PIX_FMT_YUV444) ||
+		(pixel_fmt == IPU_PIX_FMT_VYU444) ||
+		(pixel_fmt == IPU_PIX_FMT_YUYV) ||
+		(pixel_fmt == IPU_PIX_FMT_UYVY) ||
+		(pixel_fmt == IPU_PIX_FMT_YVYU) ||
+		(pixel_fmt == IPU_PIX_FMT_VYUY));
+}
+
+static void set_fb_bitfield(struct fb_bitfield *bf , u32 offset, u32 length,
+			    u32 msbr)
+{
+	bf->offset = offset;
+	bf->length = length;
+	bf->msb_right = msbr;
+}
+
+static int mxc_hdmi_var_color_format(struct mxc_hdmi *hdmi, int pixelfmt,
+				     struct fb_var_screeninfo *var)
+{
+	switch (pixelfmt) {
+	case IPU_PIX_FMT_RGB24:
+		set_fb_bitfield(&var->red, 0, 8, 0);
+		set_fb_bitfield(&var->green, 8, 8, 0);
+		set_fb_bitfield(&var->blue, 16, 8, 0);
+		set_fb_bitfield(&var->transp, 0, 0, 0);
+		break;
+	case IPU_PIX_FMT_BGR24:
+		set_fb_bitfield(&var->red, 16, 8, 0);
+		set_fb_bitfield(&var->green, 8, 8, 0);
+		set_fb_bitfield(&var->blue, 0, 8, 0);
+		set_fb_bitfield(&var->transp, 0, 0, 0);
+		break;
+	case IPU_PIX_FMT_GBR24:
+		set_fb_bitfield(&var->red, 16, 8, 0);
+		set_fb_bitfield(&var->green, 0, 8, 0);
+		set_fb_bitfield(&var->blue, 8, 8, 0);
+		set_fb_bitfield(&var->transp, 0, 0, 0);
+		break;
+	default:
+		dev_err(&hdmi->pdev->dev, "Unsupported pixel format %s\n",
+			ipu_pixelfmt_str(pixelfmt));
+		return -EINVAL;
+	}
+	var->bits_per_pixel = 24;
+	return 0;
+}
+
 /* HDMI Initialization Step A */
 static int mxc_hdmi_disp_init(struct mxc_dispdrv_handle *disp,
 			      struct mxc_dispdrv_setting *setting)
@@ -2466,7 +2525,10 @@ static int mxc_hdmi_disp_init(struct mxc_dispdrv_handle *disp,
 
 	setting->dev_id = mxc_hdmi_ipu_id;
 	setting->disp_id = mxc_hdmi_disp_id;
-	setting->if_fmt = IPU_PIX_FMT_RGB24;
+	if (!valid_mode(setting->if_fmt)) {
+		dev_warn(&hdmi->pdev->dev, "Input pixel format not valid use default RGB24\n");
+		setting->if_fmt = IPU_PIX_FMT_RGB24;
+	}
 
 	hdmi->dft_mode_str = setting->dft_mode_str;
 	hdmi->default_bpp = setting->default_bpp;
@@ -2534,6 +2596,7 @@ static int mxc_hdmi_disp_init(struct mxc_dispdrv_handle *disp,
 
 	spin_lock_init(&hdmi->irq_lock);
 
+	mxc_hdmi_var_color_format(hdmi, setting->if_fmt, &hdmi->fbi->var);
 	/* Set the default mode and modelist when disp init. */
 	fb_find_mode(&hdmi->fbi->var, hdmi->fbi,
 		     hdmi->dft_mode_str, NULL, 0, NULL,

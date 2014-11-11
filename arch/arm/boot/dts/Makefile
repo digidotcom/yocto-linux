@@ -120,8 +120,11 @@ dtb-$(CONFIG_ARCH_MXC) += \
 	imx6dl-sabresd.dtb \
 	imx6dl-sabresd-hdcp.dtb \
 	imx6dl-sabresd-ldo.dtb \
+	imx6dl-sabresd-pf200.dtb \
 	imx6dl-wandboard.dtb \
 	imx6q-arm2.dtb \
+	imx6q-ccimx6adpt.dtb \
+	imx6q-ccimx6sbc.dtb \
 	imx6q-sabreauto.dtb \
 	imx6q-sabreauto-ecspi.dtb \
 	imx6q-sabreauto-flexcan1.dtb \
@@ -131,15 +134,10 @@ dtb-$(CONFIG_ARCH_MXC) += \
 	imx6q-sabresd-hdcp.dtb \
 	imx6q-sabresd-ldo.dtb \
 	imx6q-sbc6x.dtb \
-	imx6-ccimx6adpt.dtb \
-	imx6-ccimx6adpt-ldo.dtb \
-	imx6-ccimx6adpt-hdcp.dtb \
-	imx6-ccimx6sbc.dtb \
-	imx6-ccimx6sbc-ldo.dtb \
-	imx6-ccimx6sbc-hdcp.dtb \
 	imx6sl-evk.dtb \
 	imx6sl-evk-csi.dtb \
 	imx6sl-evk-ldo.dtb \
+	imx6sl-evk-pf200.dtb \
 	vf610-twr.dtb
 dtb-$(CONFIG_ARCH_MXS) += imx23-evk.dtb \
 	imx23-olinuxino.dtb \

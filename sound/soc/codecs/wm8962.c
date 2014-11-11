@@ -3399,6 +3399,7 @@ static int wm8962_probe(struct snd_soc_codec *codec)
 {
 	int ret;
 	struct wm8962_priv *wm8962 = snd_soc_codec_get_drvdata(codec);
+	struct wm8962_pdata *pdata = &wm8962->pdata;
 	struct wm8962_pdata *pdata = dev_get_platdata(codec->dev);
 	int i, trigger, irq_pol;
 	bool dmicclk, dmicdat;

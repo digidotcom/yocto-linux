@@ -167,6 +167,8 @@ static int mic_bias_event(struct snd_soc_dapm_widget *w,
 static int power_vag_event(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
+	const u32 mask = SGTL5000_DAC_POWERUP | SGTL5000_ADC_POWERUP;
+
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
 		snd_soc_update_bits(w->codec, SGTL5000_CHIP_ANA_POWER,
@@ -174,9 +176,17 @@ static int power_vag_event(struct snd_soc_dapm_widget *w,
 		break;
 
 	case SND_SOC_DAPM_PRE_PMD:
-		snd_soc_update_bits(w->codec, SGTL5000_CHIP_ANA_POWER,
-			SGTL5000_VAG_POWERUP, 0);
-		msleep(400);
+		/*
+		 * Don't clear VAG_POWERUP, when both DAC and ADC are
+		 * operational to prevent inadvertently starving the
+		 * other one of them.
+		 */
+		if ((snd_soc_read(w->codec, SGTL5000_CHIP_ANA_POWER) &
+				mask) != mask) {
+			snd_soc_update_bits(w->codec, SGTL5000_CHIP_ANA_POWER,
+				SGTL5000_VAG_POWERUP, 0);
+			msleep(400);
+		}
 		break;
 	default:
 		break;
@@ -466,8 +476,7 @@ static int sgtl5000_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 		break;
 	case SND_SOC_DAIFMT_I2S:
 		i2sctl |= SGTL5000_I2S_MODE_I2S_LJ;
-		if (of_machine_is_compatible("digi,ccimx6sbc") ||
-		    of_machine_is_compatible("digi,ccimx6adpt"))
+		if (of_machine_is_compatible("digi,ccimx6"))
 				i2sctl |= SGTL5000_I2S_LRPOL;
 		break;
 	case SND_SOC_DAIFMT_RIGHT_J:
@@ -688,7 +697,6 @@ static int sgtl5000_pcm_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_codec *codec = dai->codec;
 	struct sgtl5000_priv *sgtl5000 = snd_soc_codec_get_drvdata(codec);
-	int channels = params_channels(params);
 	int i2s_ctl = 0;
 	int stereo;
 	int ret;
@@ -705,8 +713,7 @@ static int sgtl5000_pcm_hw_params(struct snd_pcm_substream *substream,
 		stereo = SGTL5000_ADC_STEREO;
 
 	/* set mono to save power */
-	snd_soc_update_bits(codec, SGTL5000_CHIP_ANA_POWER, stereo,
-			channels == 1 ? 0 : stereo);
+	snd_soc_update_bits(codec, SGTL5000_CHIP_ANA_POWER, stereo, stereo);
 
 	/* set codec clock base on lrclk */
 	ret = sgtl5000_set_clock(codec, params_rate(params));
@@ -923,8 +930,7 @@ static int sgtl5000_set_bias_level(struct snd_soc_codec *codec,
 		break;
 	case SND_SOC_BIAS_STANDBY:
 		if (codec->dapm.bias_level == SND_SOC_BIAS_OFF) {
-			if (of_machine_is_compatible("digi,ccimx6sbc") ||
-			    of_machine_is_compatible("digi,ccimx6adpt")) {
+			if (of_machine_is_compatible("digi,ccimx6")) {
 				reg = snd_soc_read(codec,
 						   SGTL5000_CHIP_ANA_POWER);
 				reg |= SGTL5000_VAG_POWERUP;
@@ -945,8 +951,7 @@ static int sgtl5000_set_bias_level(struct snd_soc_codec *codec,
 		}
 		break;
 	case SND_SOC_BIAS_OFF:
-		if (of_machine_is_compatible("digi,ccimx6sbc") ||
-		    of_machine_is_compatible("digi,ccimx6adpt")) {
+		if (of_machine_is_compatible("digi,ccimx6")) {
 			reg = snd_soc_read(codec,
 					   SGTL5000_CHIP_ANA_POWER);
 			reg &= ~SGTL5000_VAG_POWERUP;
