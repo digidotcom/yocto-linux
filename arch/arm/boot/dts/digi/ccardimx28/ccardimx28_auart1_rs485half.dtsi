@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 Digi International, Inc.
+ * Copyright 2014 Digi International, Inc.
  *
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -12,9 +12,12 @@
 / {
 	apb@80000000 {
 		apbx@80040000 {
-			auart3: serial@80070000 {
+			auart1: serial@8006c000 {
 				pinctrl-names = "default";
-				pinctrl-0 = <&auart3_2pins_b>;
+				pinctrl-0 = <&auart1_3pins_a>;
+				linux,rs485-enabled-at-boot-time;
+				rs485-rts-active-high;
+				rs485-rts-delay = <0 0>;
 				status = "okay";
 			};
 		};

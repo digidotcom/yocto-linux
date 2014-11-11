@@ -140,6 +140,8 @@ struct mxs_auart_port {
 #define MXS_AUART_DMA_ENABLED	0x2
 #define MXS_AUART_DMA_TX_SYNC	2  /* bit 2 */
 #define MXS_AUART_DMA_RX_READY	3  /* bit 3 */
+#define MXS_AUART_RS485_RXE_ENABLED 0x10
+#define MXS_AUART_RS485_XMIT_IN_PROGRESS 0x20
 	unsigned long flags;
 	unsigned int ctrl;
 	enum mxs_auart_type devtype;
@@ -157,6 +159,10 @@ struct mxs_auart_port {
 	struct scatterlist rx_sgl;
 	struct dma_chan	*rx_dma_chan;
 	void *rx_dma_buf;
+
+	/* for RS-485 */
+	struct serial_rs485 rs485;
+	unsigned int char_usec;
 };
 
 static struct platform_device_id mxs_auart_devtype[] = {
@@ -248,9 +254,87 @@ static int mxs_auart_dma_tx(struct mxs_auart_port *s, int size)
 	return 0;
 }
 
+static inline unsigned int mxs_auart_tx_empty(struct uart_port *u)
+{
+	unsigned long stat;
+
+	stat = readl(u->membase + AUART_STAT);
+	if ((stat & (AUART_STAT_BUSY | AUART_STAT_TXFE)) == AUART_STAT_TXFE)
+		return TIOCSER_TEMT;
+
+	return 0;
+}
+
+static inline int mxs_auart_rs485_enabled(struct mxs_auart_port *s)
+{
+	return (s->rs485.flags & SER_RS485_ENABLED);
+}
+
+static inline void mxs_auart_save_rxe_flag(struct mxs_auart_port *s)
+{
+	unsigned long reg_ctrl2 = readl(s->port.membase + AUART_CTRL2);
+	if (reg_ctrl2 & AUART_CTRL2_RXE)
+		s->flags |= MXS_AUART_RS485_RXE_ENABLED;
+	else
+		s->flags &= ~MXS_AUART_RS485_RXE_ENABLED;
+}
+
+static inline void mxs_auart_restore_rxe_flag(struct mxs_auart_port *s)
+{
+	if (s->flags & MXS_AUART_RS485_RXE_ENABLED)
+		writel(AUART_CTRL2_RXE, s->port.membase + AUART_CTRL2_SET);
+	else
+		writel(AUART_CTRL2_RXE, s->port.membase + AUART_CTRL2_CLR);
+
+}
+
+static inline void mxs_auart_rs485_xmit_enable(struct mxs_auart_port *s)
+{
+	int rts_action = (s->rs485.flags & SER_RS485_RTS_ON_SEND) ?
+			  AUART_CTRL2_SET : AUART_CTRL2_CLR;
+
+	/* The RXE flag is cleared when an RS-485 transmission starts, so if a
+	 * transmission is already in progress when a second call to
+	 * mxs_auart_rs485_xmit_enable is made (as is the case when the
+	 * transmit FIFO is filled) it will result in RXE being *permanently*
+	 * disabled. Prevent this by short-circuiting if a transmission has
+	 * already been started */
+	if (s->flags & MXS_AUART_RS485_XMIT_IN_PROGRESS)
+		return;
+
+	s->flags |= MXS_AUART_RS485_XMIT_IN_PROGRESS;
+
+	/* Enabling TX disables RX and RX interrupts unless requested */
+	if (!(s->rs485.flags & SER_RS485_RX_DURING_TX)) {
+		/* Save and clear RXE while RS-485 is enabled */
+		mxs_auart_save_rxe_flag(s);
+		writel(AUART_CTRL2_RXE, s->port.membase + AUART_CTRL2_CLR);
+	}
+
+	writel(AUART_CTRL2_RTS, s->port.membase + rts_action);
+	if (s->rs485.delay_rts_before_send > 0)
+		mdelay(s->rs485.delay_rts_before_send);
+}
+
+static inline void mxs_auart_rs485_xmit_disable(struct mxs_auart_port *s)
+{
+	int rts_action = (s->rs485.flags & SER_RS485_RTS_AFTER_SEND) ?
+			  AUART_CTRL2_SET : AUART_CTRL2_CLR;
+
+	if (s->rs485.delay_rts_after_send > 0)
+		mdelay(s->rs485.delay_rts_after_send);
+	writel(AUART_CTRL2_RTS, s->port.membase + rts_action);
+
+	if (!(s->rs485.flags & SER_RS485_RX_DURING_TX))
+		mxs_auart_restore_rxe_flag(s);
+
+	s->flags &= ~MXS_AUART_RS485_XMIT_IN_PROGRESS;
+}
+
 static void mxs_auart_tx_chars(struct mxs_auart_port *s)
 {
 	struct circ_buf *xmit = &s->port.state->xmit;
+	unsigned long expire;
 	unsigned long flags;
 
 	if (auart_dma_enabled(s)) {
@@ -289,6 +373,9 @@ static void mxs_auart_tx_chars(struct mxs_auart_port *s)
 		return;
 	}
 
+	if (!uart_circ_empty(xmit) && mxs_auart_rs485_enabled(s))
+		mxs_auart_rs485_xmit_enable(s);
+
 	while (!(readl(s->port.membase + AUART_STAT) &
 		 AUART_STAT_TXFF)) {
 		if (s->port.x_char) {
@@ -312,12 +399,22 @@ static void mxs_auart_tx_chars(struct mxs_auart_port *s)
 		spin_unlock_irqrestore(&s->port.lock, flags);
 	}
 
-	if (uart_circ_empty(&(s->port.state->xmit)))
-		writel(AUART_INTR_TXIEN,
-			     s->port.membase + AUART_INTR_CLR);
-	else
-		writel(AUART_INTR_TXIEN,
-			     s->port.membase + AUART_INTR_SET);
+	if (uart_circ_empty(&(s->port.state->xmit))) {
+		writel(AUART_INTR_TXIEN, s->port.membase + AUART_INTR_CLR);
+		if (mxs_auart_rs485_enabled(s)) {
+			/* Purge the FIFO. We are in an atomic context here, so
+			 * cannot use the *sleep family of functions */
+			expire = jiffies + s->port.timeout;
+			while (!mxs_auart_tx_empty(&s->port)) {
+				if (time_after(jiffies, expire))
+					break;
+				udelay(s->char_usec);
+			}
+			mxs_auart_rs485_xmit_disable(s);
+		}
+	} else {
+		writel(AUART_INTR_TXIEN, s->port.membase + AUART_INTR_SET);
+	}
 
 	if (uart_tx_stopped(&s->port))
 		mxs_auart_stop_tx(&s->port);
@@ -420,12 +517,15 @@ static void mxs_auart_set_mctrl(struct uart_port *u, unsigned mctrl)
 
 	u32 ctrl = readl(u->membase + AUART_CTRL2);
 
-	ctrl &= ~(AUART_CTRL2_RTSEN | AUART_CTRL2_RTS);
-	if (mctrl & TIOCM_RTS) {
-		if (tty_port_cts_enabled(&u->state->port))
-			ctrl |= AUART_CTRL2_RTSEN;
-		else
-			ctrl |= AUART_CTRL2_RTS;
+	/* Only allow outside RTS control if RS-485 is not enabled */
+	if (!mxs_auart_rs485_enabled(s)) {
+		ctrl &= ~(AUART_CTRL2_RTSEN | AUART_CTRL2_RTS);
+		if (mctrl & TIOCM_RTS) {
+			if (tty_port_cts_enabled(&u->state->port))
+				ctrl |= AUART_CTRL2_RTSEN;
+			else
+				ctrl |= AUART_CTRL2_RTS;
+		}
 	}
 
 	s->ctrl = mctrl;
@@ -590,6 +690,35 @@ err_out:
 
 }
 
+static unsigned int mxs_auart_char_time_usec(unsigned int cflag,
+					     unsigned int baud)
+{
+	unsigned int bits;
+
+	/* byte size and start/stop bits */
+	switch (cflag & CSIZE) {
+	case CS5:
+		bits = 7;
+		break;
+	case CS6:
+		bits = 8;
+		break;
+	case CS7:
+		bits = 9;
+		break;
+	default:
+		bits = 10;
+		break; /* CS8 */
+	}
+
+	if (cflag & CSTOPB)
+		bits++;
+	if (cflag & PARENB)
+		bits++;
+
+	return ((bits * 1000000) / baud);
+}
+
 static void mxs_auart_settermios(struct uart_port *u,
 				 struct ktermios *termios,
 				 struct ktermios *old)
@@ -657,17 +786,21 @@ static void mxs_auart_settermios(struct uart_port *u,
 	/*
 	 * ignore all characters if CREAD is not set
 	 */
-	if (cflag & CREAD)
+	if (cflag & CREAD) {
 		ctrl2 |= AUART_CTRL2_RXE;
-	else
+		s->flags |= MXS_AUART_RS485_RXE_ENABLED;
+	} else {
 		ctrl2 &= ~AUART_CTRL2_RXE;
+		s->flags &= ~MXS_AUART_RS485_RXE_ENABLED;
+	}
 
 	/* figure out the stop bits requested */
 	if (cflag & CSTOPB)
 		ctrl |= AUART_LINECTRL_STP2;
 
-	/* figure out the hardware flow control settings */
-	if (cflag & CRTSCTS)
+	/* figure out the hardware flow control settings
+	 * do not enable hardware flow control if in RS-485 mode */
+	if ((cflag & CRTSCTS) && !mxs_auart_rs485_enabled(s))
 		ctrl2 |= AUART_CTRL2_CTSEN | AUART_CTRL2_RTSEN;
 	else
 		ctrl2 &= ~(AUART_CTRL2_CTSEN | AUART_CTRL2_RTSEN);
@@ -686,6 +819,9 @@ static void mxs_auart_settermios(struct uart_port *u,
 	writel(ctrl2, u->membase + AUART_CTRL2);
 
 	uart_update_timeout(u, termios->c_cflag, baud);
+
+	/* Save the time it takes to transfer 1 character (in usec) */
+	s->char_usec = mxs_auart_char_time_usec(cflag, baud);
 
 	spin_unlock_irqrestore(&s->port.lock, flags);
 }
@@ -743,6 +879,34 @@ static void mxs_auart_reset(struct uart_port *u)
 	writel(AUART_CTRL0_CLKGATE, u->membase + AUART_CTRL0_CLR);
 }
 
+static void mxs_auart_config_rs485(struct uart_port *u,
+				   struct serial_rs485 *rs485conf)
+{
+	struct mxs_auart_port *s = to_auart_port(u);
+	unsigned long flags;
+	int rts_action;
+
+	/* disable interrupts while we work */
+	spin_lock_irqsave(&s->port.lock, flags);
+
+	/* store new config */
+	s->rs485 = *rs485conf;
+
+	/* DMA and hardware flow control must be disabled in RS-485 mode */
+	if (!mxs_auart_rs485_enabled(s)) {
+		s->flags &= ~MXS_AUART_DMA_ENABLED;
+		writel((AUART_CTRL2_RTSEN | AUART_CTRL2_CTSEN),
+		       s->port.membase + AUART_CTRL2_CLR);
+	}
+
+	/* always start with RTS disabled */
+	rts_action = (s->rs485.flags & SER_RS485_RTS_AFTER_SEND) ?
+		      AUART_CTRL2_SET : AUART_CTRL2_CLR;
+	writel(AUART_CTRL2_RTS, s->port.membase + rts_action);
+
+	spin_unlock_irqrestore(&s->port.lock, flags);
+}
+
 static int mxs_auart_startup(struct uart_port *u)
 {
 	struct mxs_auart_port *s = to_auart_port(u);
@@ -796,6 +960,10 @@ static int mxs_auart_startup(struct uart_port *u)
 		}
 	}
 
+	/* enact startup settings, particularly if RS-485 was enabled at boot */
+	if (mxs_auart_rs485_enabled(s))
+		mxs_auart_config_rs485(u, &s->rs485);
+
 	return 0;
 }
 
@@ -814,17 +982,6 @@ static void mxs_auart_shutdown(struct uart_port *u)
 	writel(AUART_CTRL0_CLKGATE, u->membase + AUART_CTRL0_SET);
 
 	clk_disable_unprepare(s->clk);
-}
-
-static unsigned int mxs_auart_tx_empty(struct uart_port *u)
-{
-	unsigned long stat;
-
-	stat = readl(u->membase + AUART_STAT);
-	if ((stat & (AUART_STAT_BUSY | AUART_STAT_TXFE)) == AUART_STAT_TXFE)
-		return TIOCSER_TEMT;
-
-	return 0;
 }
 
 /*
@@ -878,6 +1035,8 @@ static void mxs_auart_stop_tx(struct uart_port *u)
 
 static void mxs_auart_stop_rx(struct uart_port *u)
 {
+	struct mxs_auart_port *s = to_auart_port(u);
+	s->flags &= ~MXS_AUART_RS485_RXE_ENABLED;
 	writel(AUART_CTRL2_RXE, u->membase + AUART_CTRL2_CLR);
 }
 
@@ -894,6 +1053,35 @@ static void mxs_auart_break_ctl(struct uart_port *u, int ctl)
 static void mxs_auart_enable_ms(struct uart_port *port)
 {
 	/* just empty */
+}
+
+static int mxs_auart_ioctl(struct uart_port *u,
+			   unsigned int cmd,
+			   unsigned long arg)
+{
+	struct serial_rs485 rs485conf;
+	struct mxs_auart_port *s = to_auart_port(u);
+
+	switch(cmd) {
+	case TIOCSRS485:
+		if (copy_from_user(&rs485conf,
+				   (void __user *) arg,
+				   sizeof rs485conf))
+			return -EFAULT;
+		mxs_auart_config_rs485(u, &rs485conf);
+		break;
+
+	case TIOCGRS485:
+		if (copy_to_user((void __user *) arg,
+				 &(s->rs485),
+				 sizeof rs485conf))
+			return -EFAULT;
+		break;
+	default:
+		return -ENOIOCTLCMD;
+	}
+
+	return 0;
 }
 
 static struct uart_ops mxs_auart_ops = {
@@ -914,6 +1102,7 @@ static struct uart_ops mxs_auart_ops = {
 	.request_port   = mxs_auart_request_port,
 	.config_port    = mxs_auart_config_port,
 	.verify_port    = mxs_auart_verify_port,
+	.ioctl          = mxs_auart_ioctl,
 };
 
 static struct mxs_auart_port *auart_port[MXS_AUART_PORTS];
@@ -1101,6 +1290,44 @@ static int serial_mxs_probe_dt(struct mxs_auart_port *s,
 	return 0;
 }
 
+static int mxs_auart_probe_rs485(struct mxs_auart_port *s,
+		struct platform_device *pdev)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct serial_rs485 *rs485conf = &(s->rs485);
+	u32 rs485_delay[2];
+
+	rs485conf->flags = 0;
+
+	if (!np)
+		return 0;
+
+	if (of_property_read_bool(np, "rs485-rts-active-high"))
+		rs485conf->flags |= SER_RS485_RTS_AFTER_SEND;
+	else
+		rs485conf->flags |= SER_RS485_RTS_ON_SEND;
+
+	if (of_property_read_u32_array(np, "rs485-rts-delay",
+				       rs485_delay, 2) == 0) {
+		rs485conf->delay_rts_before_send = rs485_delay[0];
+		rs485conf->delay_rts_after_send = rs485_delay[1];
+	} else {
+		rs485conf->delay_rts_before_send = 0;
+		rs485conf->delay_rts_after_send = 0;
+	}
+
+	if (of_property_read_bool(np, "rs485-rx-during-tx"))
+		rs485conf->flags |= SER_RS485_RX_DURING_TX;
+
+	if (of_property_read_bool(np, "linux,rs485-enabled-at-boot-time")) {
+		/* DMA must be disabled in RS-485 mode */
+		s->flags &= ~MXS_AUART_DMA_CONFIG;
+		rs485conf->flags |= SER_RS485_ENABLED;
+	}
+
+	return 0;
+}
+
 static int mxs_auart_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *of_id =
@@ -1121,6 +1348,10 @@ static int mxs_auart_probe(struct platform_device *pdev)
 	if (ret > 0)
 		s->port.line = pdev->id < 0 ? 0 : pdev->id;
 	else if (ret < 0)
+		goto out_free;
+
+	ret = mxs_auart_probe_rs485(s, pdev);
+	if (ret < 0)
 		goto out_free;
 
 	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);

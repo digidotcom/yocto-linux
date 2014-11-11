@@ -38,12 +38,16 @@
 /include/ "digi/ccardimx28/ccardimx28_auart0_bluetooth.dtsi"
 /include/ "digi/ccardimx28/ccardimx28_auart1_2wires.dtsi"
 ///include/ "digi/ccardimx28/ccardimx28_auart1_4wires.dtsi"
+///include/ "digi/ccardimx28/ccardimx28_auart1_rs485half.dtsi"
 ///include/ "digi/ccardimx28/ccardimx28_auart2_2wires.dtsi"
 ///include/ "digi/ccardimx28/ccardimx28_auart2_4wires.dtsi"
+///include/ "digi/ccardimx28/ccardimx28_auart2_rs485half.dtsi"
 ///include/ "digi/ccardimx28/ccardimx28_auart3_2wires.dtsi"
 ///include/ "digi/ccardimx28/ccardimx28_auart3_4wires.dtsi"
+///include/ "digi/ccardimx28/ccardimx28_auart3_rs485half.dtsi"
 ///include/ "digi/ccardimx28/ccardimx28_auart4_2wires.dtsi"
 ///include/ "digi/ccardimx28/ccardimx28_auart4_4wires.dtsi"
+///include/ "digi/ccardimx28/ccardimx28_auart4_rs485half.dtsi"
 
 /* SSP (and WiFi) */
 /include/ "digi/ccardimx28/ccardimx28_ssp0_mmc.dtsi"

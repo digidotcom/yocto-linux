@@ -69,6 +69,14 @@ struct mx28_virt_addr_t mx28_virt_addr;
 static phys_addr_t iram_phy_addr;
 static unsigned long iram_virtual_addr;
 static struct gen_pool *iram_pool;
+static struct clk *cpu_clk;
+static struct clk *osc_clk;
+static struct clk *pll_clk;
+static struct clk *hbus_clk;
+static struct clk *cpu_parent = NULL;
+static int cpu_rate;
+static int hbus_rate;
+static u32 reg_clkctrl_clkseq, reg_clkctrl_xtal;
 
 static inline void __mxs_setl(u32 mask, void __iomem *reg)
 {
@@ -90,17 +98,71 @@ static void get_virt_addr(char *name, void __iomem **paddr)
 	pr_debug("get_virt_addr: address of %s is %p\n", name, *paddr);
 }
 
+static void prepare_for_suspend(void)
+{
+	/* make sure SRAM copy gets physically written into SDRAM.
+	 * SDRAM will be placed into self-refresh during power down
+	 */
+	flush_cache_all();
+
+	cpu_clk = clk_get_sys("cpu", NULL);
+	osc_clk = clk_get_sys("cpu_xtal", NULL);
+	pll_clk = clk_get_sys("pll0", NULL);
+	hbus_clk = clk_get_sys("hbus", NULL);
+
+	/* Switch clock domains from PLL to 24MHz */
+	if (!IS_ERR(cpu_clk) && !IS_ERR(osc_clk)) {
+		cpu_rate = clk_get_rate(cpu_clk);
+		cpu_parent = clk_get_parent(cpu_clk);
+		hbus_rate = clk_get_rate(hbus_clk);
+		if (clk_set_parent(cpu_clk, osc_clk) < 0)
+			pr_err("Failed to switch cpu clocks.");
+	} else {
+		pr_err("fail to get cpu clk\n");
+	}
+	if (cpu_rate == 261818000)
+		clk_set_rate(hbus_clk, 8727267);
+
+	/* Enable PSWITCH interrupt to wake the system */
+	__mxs_setl(BM_POWER_CTRL_ENIRQ_PSWITCH,
+		   mx28_virt_addr.power_addr + HW_POWER_CTRL);
+
+	/* Save clock registers */
+	reg_clkctrl_clkseq = __raw_readl(mx28_virt_addr.clkctrl_addr +
+					 HW_CLKCTRL_CLKSEQ);
+	reg_clkctrl_xtal = __raw_readl(mx28_virt_addr.clkctrl_addr +
+				       HW_CLKCTRL_XTAL);
+}
+
+static void prepare_for_resume(void)
+{
+	/* Restore clock registers */
+	__raw_writel(reg_clkctrl_clkseq, mx28_virt_addr.clkctrl_addr +
+		     HW_CLKCTRL_CLKSEQ);
+	__raw_writel(reg_clkctrl_xtal, mx28_virt_addr.clkctrl_addr +
+		     HW_CLKCTRL_XTAL);
+
+	/* Clear PSWITCH interrupt status */
+	__mxs_clrl(BM_POWER_CTRL_PSWITCH_IRQ,
+		   mx28_virt_addr.power_addr + HW_POWER_CTRL);
+
+	/* Restore CPU to drive from PLL and CPU and HBUS clock rates */
+	if (cpu_parent) {
+		if (clk_set_parent(cpu_clk, cpu_parent) < 0)
+			pr_err("Failed to switch cpu clock back.");
+		clk_set_rate(cpu_clk, cpu_rate);
+		clk_set_rate(hbus_clk, hbus_rate);
+	}
+
+	clk_put(hbus_clk);
+	clk_put(pll_clk);
+	clk_put(osc_clk);
+	clk_put(cpu_clk);
+}
+
 static inline void do_standby(void)
 {
 	void (*mx28_cpu_standby_ptr)(int arg1, void *arg2);
-	struct clk *cpu_clk;
-	struct clk *osc_clk;
-	struct clk *pll_clk;
-	struct clk *hbus_clk;
-	struct clk *cpu_parent = NULL;
-	int cpu_rate = 0;
-	int hbus_rate = 0;
-	u32 reg_clkctrl_clkseq, reg_clkctrl_xtal;
 	int wakeupirq;
 	int suspend_param = MXS_DO_SW_OSC_RTC_TO_BATT;
 
@@ -111,81 +173,20 @@ static inline void do_standby(void)
 		suspend_param = MXS_DONOT_SW_OSC_RTC_TO_BATT;
 	}
 
-	/*
-	 * 1) switch clock domains from PLL to 24MHz
-	 * 2) lower voltage (TODO)
-	 * 3) switch EMI to 24MHz and turn PLL off (done in sleep.S)
-	 */
-
-	/* make sure SRAM copy gets physically written into SDRAM.
-	 * SDRAM will be placed into self-refresh during power down
-	 */
-	flush_cache_all();
-
 	/* copy suspend function into SRAM */
 	memcpy((void *)iram_virtual_addr, mx28_cpu_standby,
 	       mx28_standby_alloc_sz);
 
-	/* now switch the CPU to cpu_xtal */
-	cpu_clk = clk_get_sys("cpu", NULL);
-	osc_clk = clk_get_sys("cpu_xtal", NULL);
-	pll_clk = clk_get_sys("pll0", NULL);
-	hbus_clk = clk_get_sys("hbus", NULL);
-	if (!IS_ERR(cpu_clk) && !IS_ERR(osc_clk)) {
-		cpu_rate = clk_get_rate(cpu_clk);
-		cpu_parent = clk_get_parent(cpu_clk);
-		hbus_rate = clk_get_rate(hbus_clk);
-		if (clk_set_parent(cpu_clk, osc_clk) < 0) {
-			pr_err("Failed to switch cpu clocks.");
-			goto cpu_clk_err;
-		}
-	} else
-		pr_err("fail to get cpu clk\n");
-	if (cpu_rate == 261818000)
-		clk_set_rate(hbus_clk, 8727267);
 	local_fiq_disable();
-
-	__mxs_setl(BM_POWER_CTRL_ENIRQ_PSWITCH,
-		   mx28_virt_addr.power_addr + HW_POWER_CTRL);
-
-	reg_clkctrl_clkseq = __raw_readl(mx28_virt_addr.clkctrl_addr +
-					 HW_CLKCTRL_CLKSEQ);
-
-	reg_clkctrl_xtal = __raw_readl(mx28_virt_addr.clkctrl_addr +
-				       HW_CLKCTRL_XTAL);
 
 	/* do suspend */
 	mx28_cpu_standby_ptr = (void *)iram_virtual_addr;
-
 	mx28_cpu_standby_ptr(suspend_param, &mx28_virt_addr);
 
 	wakeupirq = __raw_readl(mx28_virt_addr.icoll_addr + HW_ICOLL_STAT);
-
 	pr_info("wakeup irq = %d\n", wakeupirq);
 
-	__raw_writel(reg_clkctrl_clkseq, mx28_virt_addr.clkctrl_addr +
-		     HW_CLKCTRL_CLKSEQ);
-	__raw_writel(reg_clkctrl_xtal, mx28_virt_addr.clkctrl_addr +
-		     HW_CLKCTRL_XTAL);
-	__mxs_clrl(BM_POWER_CTRL_PSWITCH_IRQ,
-		   mx28_virt_addr.power_addr + HW_POWER_CTRL);
-	__mxs_setl(BM_POWER_CTRL_ENIRQ_PSWITCH,
-		   mx28_virt_addr.power_addr + HW_POWER_CTRL);
-
 	local_fiq_enable();
-
-	if (cpu_parent) {
-		if (clk_set_parent(cpu_clk, cpu_parent) < 0)
-			pr_err("Failed to switch cpu clock back.");
-		clk_set_rate(cpu_clk, cpu_rate);
-		clk_set_rate(hbus_clk, hbus_rate);
-	}
-
-cpu_clk_err:
-	clk_put(hbus_clk);
-	clk_put(pll_clk);
-	clk_put(osc_clk);
-	clk_put(cpu_clk);
 }
 
 static int mxs_suspend_enter(suspend_state_t state)
@@ -194,13 +195,19 @@ static int mxs_suspend_enter(suspend_state_t state)
 	case PM_SUSPEND_MEM:
 	case PM_SUSPEND_STANDBY:
 		if (of_machine_is_compatible("digi,ccardimx28") && iram_pool) {
-			if (mxs_icoll_suspend() < 0)
+			if (mxs_icoll_suspend() < 0) {
 				printk(KERN_ERR "No wake-up sources enabled. Suspend aborted.\n");
-			else
-				do_standby();
+			}
+			else {
+				prepare_for_suspend();
+				//do_standby();
+				cpu_do_idle();
+				prepare_for_resume();
+			}
 			mxs_icoll_resume();
-		} else
+		} else {
 			cpu_do_idle();
+		}
 		break;
 
 	default:
