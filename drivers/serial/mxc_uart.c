@@ -1155,39 +1155,8 @@ static int mxcuart_startup(struct uart_port *port)
 	int retval;
 	volatile unsigned int cr, cr1 = 0, cr2 = 0, ufcr = 0;
 
-	/*
-	 * Some UARTs need separate registrations for the interrupts as
-	 * they do not take the muxed interrupt output to the ARM core
-	 */
-	if (umxc->ints_muxed == 1) {
-		retval = request_irq(umxc->port.irq, mxcuart_int, 0,
-				     "mxcintuart", umxc);
-		if (retval != 0) {
-			return retval;
-		}
-	} else {
-		retval = request_irq(umxc->port.irq, mxcuart_tx_int,
-				     0, "mxcintuart", umxc);
-		if (retval != 0) {
-			return retval;
-		} else {
-			retval = request_irq(umxc->irqs[0], mxcuart_rx_int,
-					     0, "mxcintuart", umxc);
-			if (retval != 0) {
-				free_irq(umxc->port.irq, umxc);
-				return retval;
-			} else {
-				retval =
-				    request_irq(umxc->irqs[1], mxcuart_mint_int,
-						0, "mxcintuart", umxc);
-				if (retval != 0) {
-					free_irq(umxc->port.irq, umxc);
-					free_irq(umxc->irqs[0], umxc);
-					return retval;
-				}
-			}
-		}
-	}
+	printk(KERN_INFO "Serial: MXC UART Startup. DMA Enabled %s\n",
+			umxc->dma_enabled ? "yes" : "no");
 
 	/* Initialize the DMA if we need SDMA data transfer */
 	if (umxc->dma_enabled == 1) {
@@ -1197,7 +1166,6 @@ static int mxcuart_startup(struct uart_port *port)
 			    (KERN_ERR
 			     "MXC UART: Failed to initialize DMA for UART %d\n",
 			     umxc->port.line);
-			mxcuart_free_interrupts(umxc);
 			return retval;
 		}
 		/* Configure the GPR register to receive SDMA events */
@@ -1270,7 +1238,48 @@ static int mxcuart_startup(struct uart_port *port)
 	}
 	writel(cr1, umxc->port.membase + MXC_UARTUCR1);
 
+	/*
+	 * Some UARTs need separate registrations for the interrupts as
+	 * they do not take the muxed interrupt output to the ARM core
+	 */
+	if (umxc->ints_muxed == 1) {
+		retval = request_irq(umxc->port.irq, mxcuart_int, 0,
+				     "mxcintuart", umxc);
+		if (retval != 0) {
+			goto err_irq;
+		}
+	} else {
+		retval = request_irq(umxc->port.irq, mxcuart_tx_int,
+				     0, "mxcintuart", umxc);
+		if (retval != 0) {
+			goto err_irq;
+		} else {
+			retval = request_irq(umxc->irqs[0], mxcuart_rx_int,
+					     0, "mxcintuart", umxc);
+			if (retval != 0) {
+				free_irq(umxc->port.irq, umxc);
+				goto err_irq;
+			} else {
+				retval =
+				    request_irq(umxc->irqs[1], mxcuart_mint_int,
+						0, "mxcintuart", umxc);
+				if (retval != 0) {
+					free_irq(umxc->port.irq, umxc);
+					free_irq(umxc->irqs[0], umxc);
+					goto err_irq;
+				}
+			}
+		}
+	}
+
 	return 0;
+
+err_irq:
+	if (umxc->dma_enabled == 1) {
+		mxcuart_freedma(dma_list + umxc->port.line, umxc);
+	}
+
+	return retval;
 }
 
 /*!
