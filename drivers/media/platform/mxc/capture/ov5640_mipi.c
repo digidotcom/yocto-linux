@@ -698,6 +698,9 @@ static s32 update_device_addr(struct sensor_data *sensor)
 
 
 	ret = i2c_transfer(sensor->i2c_client->adapter, &msg, 1);
+	if (ret < 0)
+		pr_warn("%s: Device address not updated: %d\n", __func__,
+				ret);
 	return ret;
 }
 
@@ -809,16 +812,29 @@ static int ov5640_power_on(struct device *dev)
 
 static s32 ov5640_write_reg(u16 reg, u8 val)
 {
+	int ret = -1;
 	u8 au8Buf[3] = {0};
 
 	au8Buf[0] = reg >> 8;
 	au8Buf[1] = reg & 0xff;
 	au8Buf[2] = val;
 
-	if (i2c_master_send(ov5640_data.i2c_client, au8Buf, 3) < 0) {
-		pr_err("%s:write reg error:reg=%x,val=%x\n",
-			__func__, reg, val);
-		return -1;
+	/* If we are commanding a software reset, high bit on register 3008,
+	 * it will reset the I2C address to the default, so update it once
+	 * again right afterwards. */
+	if ((reg == 0x3008) && (val & 0x80)) {
+		mxc_camera_common_lock();
+		ret = i2c_master_send(ov5640_data.i2c_client, au8Buf, 3);
+		update_device_addr(&ov5640_data);
+		mxc_camera_common_unlock();
+	} else {
+		ret = i2c_master_send(ov5640_data.i2c_client, au8Buf, 3);
+	}
+
+	if (ret < 0) {
+		pr_err("%s:write reg error:reg=%x,val=%x ret=%d\n",
+			__func__, reg, val, ret);
+		return ret;
 	}
 
 	return 0;
@@ -1981,11 +1997,17 @@ static struct v4l2_int_device ov5640_int_device = {
 static int ov5640_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
+	struct pinctrl *pinctrl;
 	struct device *dev = &client->dev;
 	int retval, i, n_alt_pwn_gpios;
 	u8 chip_id_high, chip_id_low;
 	struct regmap *gpr;
 	int *alt_pwn_gpios = NULL;
+	pinctrl = devm_pinctrl_get_select_default(dev);
+	if (IS_ERR(pinctrl)) {
+		dev_err(dev, "mipi setup pinctrl failed!");
+		return PTR_ERR(pinctrl);
+	}
 
 	/* request power down pin */
 	pwn_gpio = of_get_named_gpio(dev->of_node, "pwn-gpios", 0);

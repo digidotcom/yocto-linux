@@ -36,6 +36,8 @@
 		gpio = <&gpio_extender 7 0>;
 		regulator-name = "gpio-ext-reg";
 		regulator-boot-on;
+		/* Leave enabled for MIPI camera suspend  to work */
+		/* regulator-always-on; */
 		enable-active-high;
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
@@ -52,6 +54,8 @@
 			"Headphone Jack", "HP_OUT";
 		mux-int-port = <2>;
 		mux-ext-port = <3>;
+		hp-det-gpios = <&gpio2 0 0>;
+		hp-det-debounce = <250>;
 	};
 
 	sound-hdmi {
@@ -486,6 +490,8 @@
 	ov5640_mipi: ov5640_mipi@4c {
 		compatible = "ovti,ov5640_mipi";
 		reg = <0x4c>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_mipi_1>;
 		clocks = <&clks 201>;
 		clock-names = "csi_mclk";
 		digi,alt-pwn-gpios = <&gpio5 0 1
@@ -551,6 +557,14 @@
 		};
 	};
 
+	mipi {
+			pinctrl_mipi_1: mipiggrp-1 {
+			fsl,pins = <
+				MX6QDL_PAD_SD3_DAT2__GPIO7_IO06 0x80000000
+			>;
+		};
+	};
+
 	hog {
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
@@ -575,7 +589,6 @@
 				MX6QDL_PAD_SD3_RST__GPIO7_IO08 0x80000000
 				MX6QDL_PAD_GPIO_9__GPIO1_IO09 0x80000000
 				MX6QDL_PAD_EIM_DA10__GPIO3_IO10 0x80000000
-				MX6QDL_PAD_SD3_DAT2__GPIO7_IO06 0x80000000
 				MX6QDL_PAD_EIM_RW__GPIO2_IO26 0x80000000
 			>;
 		};
