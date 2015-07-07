@@ -185,6 +185,7 @@ struct mxs_audio_platform_data {
 	int intr_id_hp;
 	int ext_ram;
 	struct clk *saif_mclock;
+	struct clk *saif_mclock1;
 
 	int hp_irq;
 	int (*hp_status) (void);
@@ -195,6 +196,7 @@ struct mxs_audio_platform_data {
 	int (*amp_enable) (int enable);
 	int (*finit) (void);	/* board specific finit */
 	void *priv;		/* used by board specific functions */
+	int inited;
 };
 
 struct mxs_persistent_bit_config {
