@@ -371,6 +371,8 @@ static int mxs_saif_startup(struct snd_pcm_substream *substream,
 {
 	struct mxs_saif *saif = snd_soc_dai_get_drvdata(cpu_dai);
 
+	int timeout = 1000;
+
 	/* clear error status to 0 for each re-open */
 	saif->fifo_underrun = 0;
 	saif->fifo_overrun = 0;
@@ -382,6 +384,15 @@ static int mxs_saif_startup(struct snd_pcm_substream *substream,
 	/* clear clock gate */
 	__raw_writel(BM_SAIF_CTRL_CLKGATE,
 		saif->base + SAIF_CTRL + MXS_CLR_ADDR);
+
+	/* Wait until busy flag is cleared */
+	while ((__raw_readl(saif->base + SAIF_STAT) & BM_SAIF_STAT_BUSY) &&
+		timeout--)
+		udelay(1000);
+	if (timeout == 0) {
+		dev_err(cpu_dai->dev, "error: busy\n");
+		return -EBUSY;
+	}
 
 	return 0;
 }
