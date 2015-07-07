@@ -11,17 +11,11 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-#include "imx6q-ccimx6sbc.dtsi"
+#include "imx6dl-ccimx6sbc.dtsi"
 
 / {
 	wireless {
 		digi,pwrdown-gpios = <&gpio_extender 3 0>;
-		/* U-Boot will fill in the MAC address here */
-	};
-
-	bluetooth {
-		digi,pwrdown-gpios = <&gpio_extender 4 0>;
-		digi,disable-gpios = <&gpio1 9 0>;
 		/* U-Boot will fill in the MAC address here */
 	};
 };
@@ -38,4 +32,15 @@
 			};
 		};
 	};
+};
+
+&usdhc4 {
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
+	pinctrl-0 = <&pinctrl_usdhc4_1>;
+	pinctrl-1 = <&pinctrl_usdhc4_1_100mhz>;
+	pinctrl-2 = <&pinctrl_usdhc4_1_200mhz>;
+	bus-width = <8>;
+	non-removable;
+	no-1-8-v;
+	status = "okay";
 };

@@ -12,23 +12,20 @@
  */
 
 /dts-v1/;
-
-#include "imx6q.dtsi"
+#include "imx6dl.dtsi"
 
 / {
 	model = "Digi International ConnectCore 6 Single Board Computer.";
-	compatible = "digi,ccimx6sbc", "digi,ccimx6", "fsl,imx6q";
+	compatible = "digi,ccimx6sbc", "digi,ccimx6", "fsl,imx6dl";
 	digi,machine,name = "ccimx6sbc";
 
 	aliases {
 		mxcfb0 = &mxcfb1;
 		mxcfb1 = &mxcfb2;
-		mxcfb2 = &mxcfb3;
-		mxcfb3 = &mxcfb4;
 	};
 
 	memory {
-		reg = <0x10000000 0x40000000>;
+		/* U-boot to fill memory details here */
 	};
 
 	5v_reg {
@@ -87,31 +84,10 @@
 		status = "okay";
 	};
 
-	mxcfb3: fb@2 {
-		compatible = "fsl,mxc_sdc_fb";
-		disp_dev = "lcd";
-		interface_pix_fmt = "RGB24";
-		mode_str ="LQ070Y3DG3B";
-		default_bpp = <32>;
-		int_clk = <0>;
-		late_init = <0>;
-		status = "okay";
-	};
-
-	mxcfb4: fb@3 {
-		compatible = "fsl,mxc_sdc_fb";
-		disp_dev = "ldb";
-		interface_pix_fmt = "RGB666";
-		mode_str ="LDB-HSD101PFW2";
-		default_bpp = <16>;
-		int_clk = <0>;
-		late_init = <0>;
-		status = "okay";
-	};
-
+/*
 	lcd@0 {
 		compatible = "fsl,lcd";
-		ipu_id = <1>;
+		ipu_id = <0>;
 		disp_id = <0>;
 		default_ifmt = "RGB565";
 		pinctrl-names = "default";
@@ -119,6 +95,7 @@
 		display = <&lq070y3dg3b>;
 		status = "okay";
 	};
+*/
 
 	lq070y3dg3b: LQ70Y3DG3B@0 {
 		display-timings {
@@ -154,8 +131,8 @@
 
 	v4l2_cap_0 {
 		compatible = "fsl,imx6q-v4l2-capture";
-		ipu_id = <1>;
-		csi_id = <1>;
+		ipu_id = <0>;
+		csi_id = <0>;
 		mclk_source = <0>;
 		status = "okay";
 	};
@@ -163,7 +140,7 @@
 	v4l2_cap_1 {
 		compatible = "fsl,imx6q-v4l2-capture";
 		ipu_id = <0>;
-		csi_id = <0>;
+		csi_id = <1>;
 		mclk_source = <0>;
 		status = "okay";
 	};
@@ -178,17 +155,6 @@
 		reset-gpios = <&gpio6 11 GPIO_ACTIVE_LOW>;
 		reset-delay-us = <50>;
 		#reset-cells = <0>;
-	};
-
-	wireless {
-		digi,pwrdown-gpios = <&gpio_extender 3 0>;
-		/* U-Boot will fill in the MAC address here */
-	};
-
-	bluetooth {
-		digi,pwrdown-gpios = <&gpio_extender 4 0>;
-		digi,disable-gpios = <&gpio1 9 0>;
-		/* U-Boot will fill in the MAC address here */
 	};
 
 	/* SGTL5000 codec is powered by 3V3 BUCK_PERI, but controlled
@@ -269,7 +235,7 @@
 };
 
 &hdmi_core {
-	ipu_id = <1>;
+	ipu_id = <0>;
 	disp_id = <1>;
 	status = "okay";
 };
@@ -394,7 +360,6 @@
 			bio: DA9063_BIO {
 				regulator-name = "DA9063_BIO";
 				regulator-boot-on;
-				regulator-always-on;
 				regulator-suspend-mem-microvolt = <3300000>;
 				regulator-suspend-standby-microvolt = <3300000>;
 			};
@@ -410,7 +375,6 @@
 			ldo2: DA9063_LDO2 {
 				regulator-name = "DA9063_LDO2";
 				regulator-boot-on;
-				regulator-always-on;
 				regulator-suspend-mem-microvolt = <1800000>;
 				regulator-suspend-standby-microvolt = <1800000>;
 			};
@@ -497,7 +461,7 @@
 		digi,alt-pwn-gpios = <&gpio5 0 1
 				      &gpio3 15 1>;
 		csi_id = <1>;
-		ipu_id = <1>;
+		ipu_id = <0>;
 		mclk = <24000000>;
 		mclk_source = <0>;
 	};
@@ -524,12 +488,12 @@
 		compatible = "ovti,ov564x";
 		reg = <0x6c>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_ipu2_2>;
+		pinctrl-0 = <&pinctrl_ipu1_5>;
 		clocks = <&clks 201>;
 		clock-names = "csi_mclk";
 		pwn-gpios = <&gpio3 15 1>;
 		csi_id = <1>;
-		ipu_id = <1>;
+		ipu_id = <0>;
 		mclk = <24000000>;
 		mclk_source = <0>;
 		digi,defer-probe;
@@ -540,14 +504,6 @@
 &iomuxc {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog_1>;
-
-	ipu1 {
-		pinctrl_ipu1_6: ipu1grp-6 {
-		fsl,pins = <
-			MX6QDL_PAD_NANDF_D1__GPIO2_IO01            0x80000000
-			>;
-		};
-	};
 
 	pmic_dialog {
 		pinctrl_pmic_dialog: pmic_dialoggrp {
@@ -597,7 +553,7 @@
 
 &mipi_csi {
 	status = "okay";
-	ipu_id = <1>;
+	ipu_id = <0>;
 	csi_id = <1>;
 	v_channel = <0>;
 	lanes = <2>;
@@ -608,12 +564,6 @@
 	disp_id = <0>;
 	lcd_panel = "TRULY-WVGA";
 	resets = <&mipi_dsi_reset>;
-	status = "okay";
-};
-
-&pcie {
-	pwr-gpios = <&gpio3 19 0>;
-	rst-gpios = <&gpio7 12 0>;
 	status = "okay";
 };
 
@@ -696,17 +646,6 @@
 	status = "okay";
 };
 
-&usdhc4 {
-	pinctrl-names = "default", "state_100mhz", "state_200mhz";
-	pinctrl-0 = <&pinctrl_usdhc4_1>;
-	pinctrl-1 = <&pinctrl_usdhc4_1_100mhz>;
-	pinctrl-2 = <&pinctrl_usdhc4_1_200mhz>;
-	bus-width = <8>;
-	non-removable;
-	no-1-8-v;
-	status = "okay";
-};
-
 &flexcan1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_flexcan1_2>;
@@ -718,10 +657,6 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_flexcan2_2>;
 	stby-gpios = <&gpio1 5 0>;
-	status = "okay";
-};
-
-&sata {
 	status = "okay";
 };
 

@@ -16,9 +16,9 @@
 #include "imx6q.dtsi"
 
 / {
-	model = "Digi International ConnectCore 6 MX53 JSK adapter.";
-	compatible = "digi,ccimx6adpt", "digi,ccimx6", "fsl,imx6q";
-	digi,machine,name = "ccimx6adpt";
+	model = "Digi International ConnectCore 6 Single Board Computer.";
+	compatible = "digi,ccimx6sbc", "digi,ccimx6", "fsl,imx6q";
+	digi,machine,name = "ccimx6sbc";
 
 	aliases {
 		mxcfb0 = &mxcfb1;
@@ -29,6 +29,18 @@
 
 	memory {
 		/* U-boot to fill memory details here */
+	};
+
+	5v_reg {
+		compatible = "regulator-fixed";
+		gpio = <&gpio_extender 7 0>;
+		regulator-name = "gpio-ext-reg";
+		regulator-boot-on;
+		/* Leave enabled for MIPI camera suspend  to work */
+		/* regulator-always-on; */
+		enable-active-high;
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
 	};
 
 	sound {
@@ -42,6 +54,8 @@
 			"Headphone Jack", "HP_OUT";
 		mux-int-port = <2>;
 		mux-ext-port = <3>;
+		hp-det-gpios = <&gpio2 0 0>;
+		hp-det-debounce = <250>;
 	};
 
 	sound-hdmi {
@@ -53,10 +67,10 @@
 
 	mxcfb1: fb@0 {
 		compatible = "fsl,mxc_sdc_fb";
-		disp_dev = "ldb";
-		interface_pix_fmt = "RGB666";
-		mode_str ="LDB-HSD101PFW2";
-		default_bpp = <16>;
+		disp_dev = "hdmi";
+		interface_pix_fmt = "RGB24";
+		mode_str ="1920x1080M@60";
+		default_bpp = <32>;
 		int_clk = <0>;
 		late_init = <0>;
 		status = "okay";
@@ -64,10 +78,10 @@
 
 	mxcfb2: fb@1 {
 		compatible = "fsl,mxc_sdc_fb";
-		disp_dev = "hdmi";
-		interface_pix_fmt = "RGB24";
-		mode_str ="1920x1080M@60";
-		default_bpp = <24>;
+		disp_dev = "ldb";
+		interface_pix_fmt = "RGB666";
+		mode_str ="LDB-HSD101PFW2";
+		default_bpp = <16>;
 		int_clk = <0>;
 		late_init = <0>;
 		status = "okay";
@@ -166,14 +180,17 @@
 		#reset-cells = <0>;
 	};
 
-	wireless {
-		digi,pwrdown-gpios = <&gpio_extender 3 0>;
-		/* U-Boot will fill in the MAC address here */
-	};
-
-	bluetooth {
-		digi,pwrdown-gpios = <&gpio_extender 4 0>;
-		/* U-Boot will fill in the MAC address here */
+	/* SGTL5000 codec is powered by 3V3 BUCK_PERI, but controlled
+	 * by GPIO2_25 via a FET transistor
+	 */
+	codec_power: fixedregulator@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "aud_pwr_en";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio2 25 0>;
+		enable-active-high;
+		vin-supply = <&bperi>;
 	};
 };
 
@@ -189,11 +206,11 @@
 	pu-supply = <&reg_pu>;
 };
 
-&ecspi2 {
+&ecspi1 {
 	fsl,spi-num-chipselects = <2>;
-	cs-gpios = <&gpio5 29 0>,<&gpio2 27 0>;
+	cs-gpios = <&gpio2 30 0>,<&gpio4 10 0>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_ecspi2_1>;
+	pinctrl-0 = <&pinctrl_ecspi1_3>;
 	status = "okay";
 
 	spidev@0 {
@@ -215,21 +232,6 @@
 	phy-supply = <&ldo4>;
 	status = "okay";
 };
-
-
-/* 10/100 LAN8710 PHY */
-/*
-&fec {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_enet_5>;
-	phy-mode = "rmii";
-	phy-reset-gpios = <&gpio6 24 2>;
-	phy-reset-duration = <10>;
-	phy-reset-wait = <1>;
-	phy-supply = <&ldo4>;
-	status = "okay";
-};
-*/
 
 &gpc {
 	fsl,cpu_pupscr_sw2iso = <0xf>;
@@ -328,14 +330,14 @@
 			compatible = "dlg,da9063-leds";
 
 			lvds0-backlight@0xc6 {
-				dlg,led-gpio-reg = <0x1c 0xf0>;
-				dlg,led-reg = <0xc8>;
+				dlg,led-gpio-reg = <0x1a 0xf0>;
+				dlg,led-reg = <0xc6>;
 				linux,default-trigger = "backlight";
 			};
 
 			lvds1-backlight@0xc6 {
-				dlg,led-gpio-reg = <0x1a 0xf0>;
-				dlg,led-reg = <0xc6>;
+				dlg,led-gpio-reg = <0x1c 0xf0>;
+				dlg,led-reg = <0xc8>;
 				linux,default-trigger = "backlight";
 			};
 		};
@@ -381,9 +383,8 @@
 			bio: DA9063_BIO {
 				regulator-name = "DA9063_BIO";
 				regulator-boot-on;
-				regulator-always-on;
-				regulator-suspend-mem-disabled;
-				regulator-suspend-standby-disabled;
+				regulator-suspend-mem-microvolt = <3300000>;
+				regulator-suspend-standby-microvolt = <3300000>;
 			};
 
 			bperi: DA9063_BPERI {
@@ -394,18 +395,11 @@
 				regulator-suspend-standby-microvolt = <3300000>;
 			};
 
-			ldo1: DA9063_LDO1 {
-				regulator-name = "DA9063_LDO1";
-				regulator-suspend-mem-disabled;
-				regulator-suspend-standby-disabled;
-			};
-
 			ldo2: DA9063_LDO2 {
 				regulator-name = "DA9063_LDO2";
 				regulator-boot-on;
-				regulator-always-on;
-				regulator-suspend-mem-disabled;
-				regulator-suspend-standby-disabled;
+				regulator-suspend-mem-microvolt = <1800000>;
+				regulator-suspend-standby-microvolt = <1800000>;
 			};
 
 			ldo3: DA9063_LDO3 {
@@ -420,8 +414,6 @@
 				regulator-name = "DA9063_LDO4";
 				regulator-min-microvolt = <2500000>;
 				regulator-max-microvolt = <2500000>;
-				regulator-suspend-mem-disabled;
-				regulator-suspend-standby-disabled;
 			};
 
 			ldo5: DA9063_LDO5 {
@@ -434,32 +426,6 @@
 
 			ldo6: DA9063_LDO6 {
 				regulator-name = "DA9063_LDO6";
-				regulator-suspend-mem-disabled;
-				regulator-suspend-standby-disabled;
-			};
-
-			ldo7: DA9063_LDO7 {
-				regulator-name = "DA9063_LDO7";
-				regulator-boot-on;
-				regulator-always-on;
-				regulator-suspend-mem-disabled;
-				regulator-suspend-standby-disabled;
-			};
-
-			ldo8: DA9063_LDO8 {
-				regulator-name = "DA9063_LDO8";
-				regulator-suspend-mem-disabled;
-				regulator-suspend-standby-disabled;
-			};
-
-			ldo9: DA9063_LDO9 {
-				regulator-name = "DA9063_LDO9";
-				regulator-suspend-mem-disabled;
-				regulator-suspend-standby-disabled;
-			};
-
-			ldo10: DA9063_LDO10 {
-				regulator-name = "DA9063_LDO10";
 				regulator-suspend-mem-disabled;
 				regulator-suspend-standby-disabled;
 			};
@@ -479,7 +445,7 @@
 	};
 };
 
-&i2c3	 {
+&i2c3 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c3_2>;
@@ -493,30 +459,33 @@
 	fusion@10 {
 		compatible = "touchrev,fusion-touch";
 		reg = <0x10>;
-		interrupt-parent = <&gpio2>;
-		interrupts = <1 1>;
+		interrupt-parent = <&gpio7>;
+		interrupts = <11 1>;
 		status = "okay";
 	};
 
 	sgtl5000: codec@0a {
 		compatible = "fsl,sgtl5000";
 		reg = <0x0a>;
-		clock-frequency = <13000000>;
-		VDDA-supply = <&bperi>;
-		VDDIO-supply = <&bperi>;
+		clock-frequency = <24000000>;
+		clocks = <&clks 201>;
+		VDDA-supply = <&codec_power>;
+		VDDIO-supply = <&codec_power>;
 	};
 
 	/* MIPI-CSI2 camera */
 	ov5640_mipi: ov5640_mipi@4c {
 		compatible = "ovti,ov5640_mipi";
 		reg = <0x4c>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_mipi_1>;
 		clocks = <&clks 201>;
 		clock-names = "csi_mclk";
 		digi,alt-pwn-gpios = <&gpio5 0 1
 				      &gpio3 15 1>;
 		csi_id = <1>;
 		ipu_id = <1>;
-		mclk = <13000000>;
+		mclk = <24000000>;
 		mclk_source = <0>;
 	};
 
@@ -531,7 +500,7 @@
 		pwn-gpios = <&gpio5 0 1>;
 		csi_id = <0>;
 		ipu_id = <0>;
-		mclk = <13000000>;
+		mclk = <24000000>;
 		mclk_source = <0>;
 		digi,defer-probe;
 	};
@@ -548,7 +517,7 @@
 		pwn-gpios = <&gpio3 15 1>;
 		csi_id = <1>;
 		ipu_id = <1>;
-		mclk = <13000000>;
+		mclk = <24000000>;
 		mclk_source = <0>;
 		digi,defer-probe;
 	};
@@ -559,10 +528,26 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog_1>;
 
+	ipu1 {
+		pinctrl_ipu1_6: ipu1grp-6 {
+		fsl,pins = <
+			MX6QDL_PAD_NANDF_D1__GPIO2_IO01            0x80000000
+			>;
+		};
+	};
+
 	pmic_dialog {
 		pinctrl_pmic_dialog: pmic_dialoggrp {
 			fsl,pins = <
 				MX6QDL_PAD_GPIO_17__GPIO7_IO12 0x1b0b0
+			>;
+		};
+	};
+
+	mipi {
+			pinctrl_mipi_1: mipiggrp-1 {
+			fsl,pins = <
+				MX6QDL_PAD_SD3_DAT2__GPIO7_IO06 0x80000000
 			>;
 		};
 	};
@@ -572,7 +557,6 @@
 			fsl,pins = <
 				MX6QDL_PAD_GPIO_4__GPIO1_IO04   0x80000000
 				MX6QDL_PAD_NANDF_D0__GPIO2_IO00 0x80000000
-				MX6QDL_PAD_NANDF_D1__GPIO2_IO01 0x80000000
 				MX6QDL_PAD_NANDF_D2__GPIO2_IO02 0x80000000
 				MX6QDL_PAD_NANDF_D3__GPIO2_IO03 0x80000000
 				MX6QDL_PAD_NANDF_ALE__GPIO6_IO08 0x80000000
@@ -584,16 +568,15 @@
 				MX6QDL_PAD_EIM_CS1__GPIO2_IO24 0x80000000
 				MX6QDL_PAD_EIM_A25__GPIO5_IO02 0x80000000
 				MX6QDL_PAD_EIM_D23__GPIO3_IO23 0x80000000
-				MX6QDL_PAD_EIM_D22__GPIO3_IO22  0x80000000
 				MX6QDL_PAD_NANDF_CS0__GPIO6_IO11 0x80000000
 				MX6QDL_PAD_NANDF_CS1__GPIO6_IO14 0x80000000
 				MX6QDL_PAD_EIM_EB3__GPIO2_IO31 0x80000000
-				MX6QDL_PAD_EIM_D16__GPIO3_IO16 0x80000000
 				MX6QDL_PAD_EIM_DA9__GPIO3_IO09 0x80000000
 				MX6QDL_PAD_GPIO_4__GPIO1_IO04 0x80000000
 				MX6QDL_PAD_SD3_RST__GPIO7_IO08 0x80000000
 				MX6QDL_PAD_GPIO_9__GPIO1_IO09 0x80000000
-				MX6QDL_PAD_SD3_DAT2__GPIO7_IO06 0x80000000
+				MX6QDL_PAD_EIM_DA10__GPIO3_IO10 0x80000000
+				MX6QDL_PAD_EIM_RW__GPIO2_IO26 0x80000000
 			>;
 		};
 	};
@@ -615,12 +598,6 @@
 	status = "okay";
 };
 
-&pcie {
-	pwr-gpios = <&gpio3 19 0>;
-	rst-gpios = <&gpio7 12 0>;
-	status = "okay";
-};
-
 &ssi2 {
 	fsl,mode = "i2s-slave";
 	status = "okay";
@@ -630,6 +607,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart1_2>;
 	fsl,uart-has-rtscts;
+	digi,pwr-en-gpio = <&gpio2 26 0>;
 	status = "okay";
 };
 
@@ -637,6 +615,20 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart2_3>;
 	fsl,uart-has-rtscts;
+	status = "okay";
+};
+
+&uart3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart3_2>;
+	fsl,uart-has-rtscts;
+	digi,pwr-en-gpio = <&gpio2 26 0>;
+	status = "okay";
+};
+
+&uart4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4_1>;
 	status = "okay";
 };
 
@@ -648,13 +640,15 @@
 };
 
 &usbh1 {
+	fsl,reset-gpio = <&gpio3 10 0>;
 	status = "okay";
 };
 
 &usbotg {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usbotg_1>;
-	disable-over-current;
+	pinctrl-0 = <&pinctrl_usbotg_3>;
+	fsl,power-line-polarity-active-high;
+	fsl,over-current-polarity-active-low;
 	status = "okay";
 };
 
@@ -664,8 +658,6 @@
 	pinctrl-1 = <&pinctrl_usdhc1_1_100mhz>;
 	pinctrl-2 = <&pinctrl_usdhc1_1_200mhz>;
 	no-1-8-v;
-	keep-power-in-suspend;
-	enable-sdio-wakeup;
 	status = "okay";
 };
 
@@ -678,6 +670,10 @@
 	no-1-8-v;
 	keep-power-in-suspend;
 	enable-sdio-wakeup;
+	/* Allows suspend/resume to work when using the sdcard as rootfs.
+	 * Remove this property when booting from emmc to allow card
+	 * detection to work. */
+	non-removable;
 	status = "okay";
 };
 
@@ -689,19 +685,20 @@
 	bus-width = <8>;
 	non-removable;
 	no-1-8-v;
-	keep-power-in-suspend;
 	status = "okay";
 };
 
 &flexcan1 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_flexcan1_1>;
+	pinctrl-0 = <&pinctrl_flexcan1_2>;
+	stby-gpios = <&gpio1 2 0>;
 	status = "okay";
 };
 
 &flexcan2 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_flexcan2_1>;
+	pinctrl-0 = <&pinctrl_flexcan2_2>;
+	stby-gpios = <&gpio1 5 0>;
 	status = "okay";
 };
 

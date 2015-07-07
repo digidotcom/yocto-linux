@@ -74,6 +74,7 @@ task_notify_func(struct notifier_block *self, unsigned long val, void *data)
 #else
 #include <linux/busfreq-imx6.h>
 #include <linux/reset.h>
+#include <linux/of_address.h>
 #endif
 #endif
 /* Zone used for header/footer. */
@@ -129,11 +130,7 @@ module_param(registerMemBaseVG, ulong, 0644);
 static ulong registerMemSizeVG = 2 << 10;
 module_param(registerMemSizeVG, ulong, 0644);
 
-#if gcdENABLE_FSCALE_VAL_ADJUST
-static ulong contiguousSize = 128 << 20;
-#else
-static ulong contiguousSize = 4 << 20;
-#endif
+static ulong contiguousSize;
 module_param(contiguousSize, ulong, 0644);
 
 static ulong contiguousBase = 0;
@@ -1066,7 +1063,12 @@ static int __devinit gpu_probe(struct platform_device *pdev)
     struct resource* res;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
 	struct contiguous_mem_pool *pool;
+	u32 contiguous_size_percent = 0;
 	struct reset_control *rstc;
+	struct device_node *dn = pdev->dev.of_node;
+	struct device_node *mem_node = NULL;
+	u64 mem_size = 0;
+	u32 flags = 0;
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,5,0)
 	struct device_node *dn =pdev->dev.of_node;
 	const u32 *prop;
@@ -1126,7 +1128,38 @@ static int __devinit gpu_probe(struct platform_device *pdev)
 	pool = devm_kzalloc(&pdev->dev, sizeof(*pool), GFP_KERNEL);
 	if (!pool)
 		return -ENOMEM;
-	pool->size = contiguousSize;
+
+	/* If not configured via command line, read it from Device Tree */
+	if (contiguousSize == 0) {
+		if (of_property_read_u32(dn, "contiguous-size",
+					(u32 *)&contiguous_size_percent) == 0) {
+			mem_node = of_find_node_by_path("/memory");
+			if (mem_node) {
+				if (of_get_address(mem_node, 0, &mem_size,
+						  &flags)) {
+					/* Make sure to do the div by 100 first
+					 * to avoid an overflow in the
+					 * contiguousSize variable (32-bit) */
+					contiguousSize = (((u32)mem_size / 100)
+						* contiguous_size_percent)
+							% (u32)mem_size;
+				}
+			}
+		}
+	}
+
+	/* If not configured via command line or DT, fallback to hard coded
+	 * default */
+	if (contiguousSize == 0) {
+#if gcdENABLE_FSCALE_VAL_ADJUST
+		contiguousSize = 128 << 20;
+#else
+		contiguousSize = 4 << 20;
+#endif
+	}
+	/* Round to MB */
+	contiguousSize = contiguousSize - (contiguousSize % SZ_1M);
+	pool->size = PAGE_ALIGN(contiguousSize);
 	init_dma_attrs(&pool->attrs);
 	dma_set_attr(DMA_ATTR_WRITE_COMBINE, &pool->attrs);
 	pool->virt = dma_alloc_attrs(&pdev->dev, pool->size, &pool->phys,
@@ -1135,6 +1168,8 @@ static int __devinit gpu_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to allocate contiguous memory\n");
 		return -ENOMEM;
 	}
+	dev_info(&pdev->dev, "Allocated %d MB of contiguous memory\n",
+			pool->size/SZ_1M);
 	contiguousBase = pool->phys;
 	dev_set_drvdata(&pdev->dev, pool);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,5,0)

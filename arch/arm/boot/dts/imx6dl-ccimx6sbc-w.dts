@@ -11,17 +11,11 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-#include "imx6q-ccimx6sbc.dtsi"
+#include "imx6dl-ccimx6sbc.dtsi"
 
 / {
 	wireless {
 		digi,pwrdown-gpios = <&gpio_extender 3 0>;
-		/* U-Boot will fill in the MAC address here */
-	};
-
-	bluetooth {
-		digi,pwrdown-gpios = <&gpio_extender 4 0>;
-		digi,disable-gpios = <&gpio1 9 0>;
 		/* U-Boot will fill in the MAC address here */
 	};
 };
@@ -38,4 +32,8 @@
 			};
 		};
 	};
+};
+
+&gpu {
+	contiguous-size = <16>;
 };
