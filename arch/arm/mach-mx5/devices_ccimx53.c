@@ -1265,6 +1265,11 @@ static struct i2c_board_info ccimx53_i2c_devices[] __initdata = {
 		I2C_BOARD_INFO("mt9v111_2", 0x90>>1 /*0x48*/),
 	},
 #endif
+#if defined (CONFIG_RTC_DRV_EM3027) || defined(CONFIG_RTC_DRV_EM3027_MODULE)
+	{
+		I2C_BOARD_INFO("em3027", 0x56),
+	},
+#endif
 };
 
 int __init ccimx53_init_i2c_devices(void)
