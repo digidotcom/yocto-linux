@@ -128,6 +128,7 @@ dtb-$(CONFIG_ARCH_MXC) += \
 	imx6q-ccimx6sbc-w.dtb \
 	imx6q-ccimx6sbc-wb.dtb \
 	imx6dl-ccimx6sbc-z.dtb \
+	imx6dl-ccimx6sbc-m.dtb \
 	imx6dl-ccimx6sbc-w.dtb \
 	imx6dl-ccimx6sbc-mw.dtb \
 	imx6dl-ccimx6sbc-mwb.dtb \
