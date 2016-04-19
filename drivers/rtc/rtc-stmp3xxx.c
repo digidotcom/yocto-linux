@@ -469,6 +469,9 @@ static int stmp3xxx_rtc_probe(struct platform_device *pdev)
 			STMP3XXX_RTC_CTRL_ALARM_IRQ_EN,
 			rtc_data->io + STMP3XXX_RTC_CTRL_CLR);
 
+	writel(STMP3XXX_RTC_PERSISTENT0_XTAL24MHZ_PWRUP,
+			rtc_data->io + STMP3XXX_RTC_PERSISTENT0_SET);
+
 	device_init_wakeup(&pdev->dev, 1);
 
 	rtc_data->rtc = devm_rtc_device_register(&pdev->dev, pdev->name,
