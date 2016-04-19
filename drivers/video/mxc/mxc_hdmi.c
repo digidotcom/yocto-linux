@@ -80,6 +80,10 @@
 #define YCBCR422_8BITS		3
 #define XVYCC444            4
 
+static bool only_cea = 1;
+module_param(only_cea, bool, 0644);
+MODULE_PARM_DESC(only_cea, "Allow only CEA modes");
+
 /*
  * We follow a flowchart which is in the "Synopsys DesignWare Courses
  * HDMI Transmitter Controller User Guide, 1.30a", section 3.1
@@ -176,6 +180,7 @@ struct mxc_hdmi {
 	struct fb_videomode default_mode;
 	struct fb_videomode previous_non_vga_mode;
 	bool requesting_vga_for_initialization;
+	bool dvi_mode;
 
 	int *gpr_base;
 	int *gpr_hdmi_base;
@@ -1800,7 +1805,7 @@ static void mxc_hdmi_edid_rebuild_modelist(struct mxc_hdmi *hdmi)
 		mode = &hdmi->fbi->monspecs.modedb[i];
 
 		if (!(mode->vmode & FB_VMODE_INTERLACED) &&
-				(mxc_edid_mode_to_vic(mode) != 0)) {
+				(!only_cea || mxc_edid_mode_to_vic(mode))) {
 
 			dev_dbg(&hdmi->pdev->dev, "Added mode %d:", i);
 			dev_dbg(&hdmi->pdev->dev,
@@ -1934,8 +1939,9 @@ static void mxc_hdmi_cable_connected(struct mxc_hdmi *hdmi)
 		mxc_hdmi_edid_rebuild_modelist(hdmi);
 		break;
 
-	/* Nothing to do if EDID same */
+	/* Rebuild even if they're the same in case only_cea changed */
 	case HDMI_EDID_SAME:
+		mxc_hdmi_edid_rebuild_modelist(hdmi);
 		break;
 
 	case HDMI_EDID_FAIL:
@@ -2165,12 +2171,18 @@ static void mxc_hdmi_setup(struct mxc_hdmi *hdmi, unsigned long event)
 
 	hdmi_disable_overflow_interrupts();
 
-	dev_dbg(&hdmi->pdev->dev, "CEA mode used vic=%d\n", hdmi->vic);
-	if (hdmi->edid_cfg.hdmi_cap)
-		hdmi->hdmi_data.video_mode.mDVI = false;
-	else {
-		dev_dbg(&hdmi->pdev->dev, "CEA mode vic=%d work in DVI\n", hdmi->vic);
+
+	if (hdmi->vic == 0) {
+		dev_dbg(&hdmi->pdev->dev, "Non-CEA mode used in HDMI\n");
 		hdmi->hdmi_data.video_mode.mDVI = true;
+	} else {
+		dev_dbg(&hdmi->pdev->dev, "CEA mode used vic=%d\n", hdmi->vic);
+		if (!hdmi->dvi_mode && hdmi->edid_cfg.hdmi_cap)
+			hdmi->hdmi_data.video_mode.mDVI = false;
+		else {
+			dev_dbg(&hdmi->pdev->dev, "CEA mode vic=%d work in DVI\n", hdmi->vic);
+			hdmi->hdmi_data.video_mode.mDVI = true;
+		}
 	}
 
 	if ((hdmi->vic == 6) || (hdmi->vic == 7) ||
@@ -2435,6 +2447,8 @@ static void hdmi_get_of_property(struct mxc_hdmi *hdmi)
 	ret = of_property_read_u32(np, "fsl,phy_reg_cksymtx", &phy_reg_cksymtx);
 	if (ret)
 		dev_dbg(&pdev->dev, "No board specific HDMI PHY cksymtx\n");
+
+	hdmi->dvi_mode = of_property_read_bool(np, "digi,dvi_mode");
 
 	/* Specific phy config */
 	hdmi->phy_config.reg_cksymtx = phy_reg_cksymtx;

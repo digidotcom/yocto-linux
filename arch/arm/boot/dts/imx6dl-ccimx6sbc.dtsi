@@ -127,6 +127,22 @@
 		};
 	};
 
+	ad9389_1920x1080: HDMI_1920_1080@0 {
+		display-timings {
+			timing {
+				clock-frequency = <130992926>; /* 7634 ps*/
+				hactive = <1920>;
+				vactive = <1080>;
+				hfront-porch = <88>;
+				hback-porch = <148>;
+				hsync-len = <44>;
+				vback-porch = <36>;
+				vfront-porch = <4>;
+				vsync-len = <5>;
+			};
+		};
+	};
+
 	v4l2_cap_0 {
 		compatible = "fsl,imx6q-v4l2-capture";
 		ipu_id = <0>;
@@ -433,6 +449,28 @@
 		reg = <0x50>;
 	};
 
+	hdmi_ad9389: ad9889b@39 {
+		compatible = "ad,ad9889b-i2c";
+		reg = <0x39>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_ipu1_6>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <1 GPIO_ACTIVE_HIGH>;
+		ad,edid_addr = <0x3f>; /* 0x7e >> 1*/
+		ipu_id = <0>;
+		disp_id = <0>;
+		display = <&ad9389_1920x1080>;
+		clocks = <&clks 131>, <&clks 132>,
+			 <&clks 134>, <&clks 137>,
+			 <&clks 39>, <&clks 40>,
+			 <&clks 41>, <&clks 44>;
+		clock-names = "ipu1_di0", "ipu1_di1",
+			      "ipu2_di0", "ipu2_di1",
+			      "ipu1_di0_sel", "ip11_di1_sel",
+			      "ipu2_di0_sel", "ip12_di1_sel";
+		status = "disabled";
+	};
+
 	fusion@10 {
 		compatible = "touchrev,fusion-touch";
 		reg = <0x10>;
@@ -505,6 +543,45 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog_1>;
 
+	ipu1 {
+		pinctrl_ipu1_6: ipu1grp-6 {
+		fsl,pins = <
+			MX6QDL_PAD_DI0_DISP_CLK__IPU1_DI0_DISP_CLK 0x10
+			MX6QDL_PAD_DI0_PIN15__IPU1_DI0_PIN15       0x10
+			MX6QDL_PAD_DI0_PIN2__IPU1_DI0_PIN02        0x10
+			MX6QDL_PAD_DI0_PIN3__IPU1_DI0_PIN03        0x10
+			MX6QDL_PAD_DISP0_DAT0__IPU1_DISP0_DATA00   0x10
+			MX6QDL_PAD_DISP0_DAT1__IPU1_DISP0_DATA01   0x10
+			MX6QDL_PAD_DISP0_DAT2__IPU1_DISP0_DATA02   0x10
+			MX6QDL_PAD_DISP0_DAT3__IPU1_DISP0_DATA03   0x10
+			MX6QDL_PAD_DISP0_DAT4__IPU1_DISP0_DATA04   0x10
+			MX6QDL_PAD_DISP0_DAT5__IPU1_DISP0_DATA05   0x10
+			MX6QDL_PAD_DISP0_DAT6__IPU1_DISP0_DATA06   0x10
+			MX6QDL_PAD_DISP0_DAT7__IPU1_DISP0_DATA07   0x10
+			MX6QDL_PAD_DISP0_DAT8__IPU1_DISP0_DATA08   0x10
+			MX6QDL_PAD_DISP0_DAT9__IPU1_DISP0_DATA09   0x10
+			MX6QDL_PAD_DISP0_DAT10__IPU1_DISP0_DATA10  0x10
+			MX6QDL_PAD_DISP0_DAT11__IPU1_DISP0_DATA11  0x10
+			MX6QDL_PAD_DISP0_DAT12__IPU1_DISP0_DATA12  0x10
+			MX6QDL_PAD_DISP0_DAT13__IPU1_DISP0_DATA13  0x10
+			MX6QDL_PAD_DISP0_DAT14__IPU1_DISP0_DATA14  0x10
+			MX6QDL_PAD_DISP0_DAT15__IPU1_DISP0_DATA15  0x10
+			MX6QDL_PAD_DISP0_DAT16__IPU1_DISP0_DATA16  0x10
+			MX6QDL_PAD_DISP0_DAT17__IPU1_DISP0_DATA17  0x10
+			MX6QDL_PAD_DISP0_DAT18__IPU1_DISP0_DATA18  0x10
+			MX6QDL_PAD_DISP0_DAT19__IPU1_DISP0_DATA19  0x10
+			MX6QDL_PAD_DISP0_DAT20__IPU1_DISP0_DATA20  0x10
+			MX6QDL_PAD_DISP0_DAT21__IPU1_DISP0_DATA21  0x10
+			MX6QDL_PAD_DISP0_DAT22__IPU1_DISP0_DATA22  0x10
+			MX6QDL_PAD_DISP0_DAT23__IPU1_DISP0_DATA23  0x10
+			/* DISP0_IRQ */
+			MX6QDL_PAD_NANDF_D1__GPIO2_IO01            0x80000000
+			/* DISP0_CONTRAST */
+			MX6QDL_PAD_DI0_PIN4__GPIO4_IO20 	   0x80000000
+			>;
+		};
+	};
+
 	pmic_dialog {
 		pinctrl_pmic_dialog: pmic_dialoggrp {
 			fsl,pins = <
@@ -553,6 +630,22 @@
 				MX6QDL_PAD_GPIO_9__GPIO1_IO09 0x80000000
 				MX6QDL_PAD_EIM_DA10__GPIO3_IO10 0x80000000
 				MX6QDL_PAD_EIM_RW__GPIO2_IO26 0x80000000
+				/* EXP_GPIO_0 */
+				MX6QDL_PAD_NANDF_D5__GPIO2_IO05 0x80000000
+				/* EXP_GPIO_1 */
+				MX6QDL_PAD_NANDF_D6__GPIO2_IO06 0x80000000
+				/* EXP_GPIO_2 */
+				MX6QDL_PAD_NANDF_D7__GPIO2_IO07 0x80000000
+				/* EXP_GPIO_3 */
+				MX6QDL_PAD_EIM_CS1__GPIO2_IO24 0x80000000
+				/* EXP_GPIO_4 */
+				MX6QDL_PAD_EIM_EB0__GPIO2_IO28 0x80000000
+				/* EXP_GPIO_5 */
+				MX6QDL_PAD_EIM_EB1__GPIO2_IO29 0x80000000
+				/* EXP_GPIO_6 */
+				MX6QDL_PAD_GPIO_18__GPIO7_IO13 0x80000000
+				/* EXP_GPIO_7 */
+				MX6QDL_PAD_GPIO_19__GPIO4_IO05 0x80000000
 			>;
 		};
 	};
