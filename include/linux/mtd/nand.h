@@ -462,6 +462,7 @@ struct nand_chip {
 #define NAND_MFR_AMD		0x01
 #define NAND_MFR_SANDISK	0x45
 #define NAND_MFR_INTEL		0x89
+#define NAND_MFR_ISSI		0xc8
 
 /**
  * struct nand_flash_dev - NAND Flash Device ID Structure
