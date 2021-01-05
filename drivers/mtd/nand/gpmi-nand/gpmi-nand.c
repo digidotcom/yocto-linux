@@ -83,8 +83,26 @@ static inline int get_ecc_strength(struct gpmi_nand_data *this)
 {
 	struct bch_geometry *geo = &this->bch_geometry;
 	struct mtd_info	*mtd = &this->mtd;
+	int page_data_size = mtd->writesize;
+	int page_oob_size = mtd->oobsize;
 	int ecc_strength;
 
+	/* Use U-Boot old-style for determining ECC strength */
+	if (page_data_size == 2048)
+		return 8;
+
+	if (page_data_size == 4096) {
+		if (page_oob_size == 128)
+			return 8;
+
+		if (page_oob_size == 218)
+			return 16;
+
+		if (page_oob_size == 224)
+			return 16;
+	}
+
+	/* Use new Linux dynamic way of determining ECC strength */
 	ecc_strength = ((mtd->oobsize - geo->metadata_size) * 8)
 			/ (geo->gf_len * geo->ecc_chunk_count);
 
