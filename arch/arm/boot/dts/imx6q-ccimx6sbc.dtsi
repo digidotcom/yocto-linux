@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Digi International, Inc.
+ * Copyright 2014-2021 Digi International, Inc.
  *
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -446,6 +446,22 @@
 				regulator-suspend-standby-disabled;
 			};
 
+			ldo9: DA9063_LDO9 {
+				regulator-name = "DA9063_LDO9";
+				regulator-min-microvolt = <950000>;
+				regulator-max-microvolt = <3600000>;
+				regulator-suspend-mem-microvolt = <3300000>;
+				regulator-suspend-standby-microvolt = <3300000>;
+			};
+
+			ldo10: DA9063_LDO10 {
+				regulator-name = "DA9063_LDO10";
+				regulator-min-microvolt = <900000>;
+				regulator-max-microvolt = <3600000>;
+				regulator-suspend-mem-microvolt = <3300000>;
+				regulator-suspend-standby-microvolt = <3300000>;
+			};
+
 			ldo11: DA9063_LDO11 {
 				regulator-name = "DA9063_LDO11";
 				regulator-boot-on;
@@ -753,6 +769,7 @@
 	pinctrl-1 = <&pinctrl_usdhc1_1_100mhz>;
 	pinctrl-2 = <&pinctrl_usdhc1_1_200mhz>;
 	no-1-8-v;
+	vqmmc-supply = <&ldo10>;
 	status = "okay";
 };
 
@@ -769,6 +786,7 @@
 	 * Remove this property when booting from emmc to allow card
 	 * detection to work. */
 	non-removable;
+	vqmmc-supply = <&ldo9>;
 	status = "okay";
 };
 
